@@ -1,0 +1,24 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Games",
+  "Description": "Erling Football — character creator and football playground",
+  "Plugins": [
+    {
+      "Name": "PythonScriptPlugin",
+      "Enabled": true
+    },
+    {
+      "Name": "EditorScriptingUtilities",
+      "Enabled": true
+    }
+  ],
+  "Modules": [
+    {
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "Name": "ErlingFootball"
+    }
+  ]
+}
+
