@@ -1,0 +1,96 @@
+{
+  "categories": [
+    {
+      "label": "Fryzura",
+      "options": [
+        {
+          "label": "Łysol",
+          "meshes": []
+        },
+        {
+          "label": "Kucyk",
+          "meshes": [
+            "/Game/Erling/Meshes/SK_hair_top",
+            "/Game/Erling/Meshes/SK_hair_back",
+            "/Game/Erling/Meshes/SK_bun",
+            "/Game/Erling/Meshes/SK_rubber"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Twarz",
+      "options": [
+        {
+          "label": "Uśmiech",
+          "texture": "/Game/Erling/Textures/T_happy"
+        },
+        {
+          "label": "Radość",
+          "texture": "/Game/Erling/Textures/T_joy"
+        },
+        {
+          "label": "Złość",
+          "texture": "/Game/Erling/Textures/T_angry"
+        },
+        {
+          "label": "Zaskoczenie",
+          "texture": "/Game/Erling/Textures/T_shocked"
+        },
+        {
+          "label": "Śpioch",
+          "texture": "/Game/Erling/Textures/T_sleepy"
+        },
+        {
+          "label": "Zmęczenie",
+          "texture": "/Game/Erling/Textures/T_tired"
+        }
+      ]
+    },
+    {
+      "label": "Góra",
+      "options": [
+        {
+          "label": "Golasek",
+          "meshes": []
+        },
+        {
+          "label": "Norwegia",
+          "meshes": [
+            "/Game/Erling/Meshes/SK_shirt"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Dół",
+      "options": [
+        {
+          "label": "Majtasy",
+          "meshes": []
+        },
+        {
+          "label": "Białe spodenki",
+          "meshes": [
+            "/Game/Erling/Meshes/SK_pants"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Buty",
+      "options": [
+        {
+          "label": "Boso",
+          "meshes": []
+        },
+        {
+          "label": "Korki",
+          "meshes": [
+            "/Game/Erling/Meshes/SK_shoe"
+          ]
+        }
+      ]
+    }
+  ]
+}
