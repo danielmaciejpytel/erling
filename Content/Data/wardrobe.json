@@ -1,14 +1,14 @@
 {
   "categories": [
     {
-      "label": "Fryzura",
+      "label": "Hairstyle",
       "options": [
         {
-          "label": "Łysol",
+          "label": "Bald",
           "meshes": []
         },
         {
-          "label": "Kucyk",
+          "label": "Ponytail",
           "meshes": [
             "/Game/Erling/Meshes/SK_hair_top",
             "/Game/Erling/Meshes/SK_hair_back",
@@ -19,43 +19,43 @@
       ]
     },
     {
-      "label": "Twarz",
+      "label": "Face",
       "options": [
         {
-          "label": "Uśmiech",
+          "label": "Smile",
           "texture": "/Game/Erling/Textures/T_happy"
         },
         {
-          "label": "Radość",
+          "label": "Joy",
           "texture": "/Game/Erling/Textures/T_joy"
         },
         {
-          "label": "Złość",
+          "label": "Anger",
           "texture": "/Game/Erling/Textures/T_angry"
         },
         {
-          "label": "Zaskoczenie",
+          "label": "Surprise",
           "texture": "/Game/Erling/Textures/T_shocked"
         },
         {
-          "label": "Śpioch",
+          "label": "Sleepy",
           "texture": "/Game/Erling/Textures/T_sleepy"
         },
         {
-          "label": "Zmęczenie",
+          "label": "Tired",
           "texture": "/Game/Erling/Textures/T_tired"
         }
       ]
     },
     {
-      "label": "Góra",
+      "label": "Top",
       "options": [
         {
-          "label": "Golasek",
+          "label": "Shirtless",
           "meshes": []
         },
         {
-          "label": "Norwegia",
+          "label": "Norway",
           "meshes": [
             "/Game/Erling/Meshes/SK_shirt"
           ]
@@ -63,14 +63,14 @@
       ]
     },
     {
-      "label": "Dół",
+      "label": "Bottom",
       "options": [
         {
-          "label": "Majtasy",
+          "label": "Underwear",
           "meshes": []
         },
         {
-          "label": "Białe spodenki",
+          "label": "White Shorts",
           "meshes": [
             "/Game/Erling/Meshes/SK_pants"
           ]
@@ -78,14 +78,14 @@
       ]
     },
     {
-      "label": "Buty",
+      "label": "Footwear",
       "options": [
         {
-          "label": "Boso",
+          "label": "Barefoot",
           "meshes": []
         },
         {
-          "label": "Korki",
+          "label": "Football Boots",
           "meshes": [
             "/Game/Erling/Meshes/SK_shoe"
           ]
