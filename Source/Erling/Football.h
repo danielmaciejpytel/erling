@@ -35,13 +35,13 @@ public:
  EAction Action=EAction::None;
  FString PreviousAnimation;
  float AnimationTime=0,PreviousAnimationTime=0,AnimationBlend=1,BlendSeconds=.16f,PlaybackRate=1,PreviousRate=1;
- bool AnimationLoops=true,PreviousLoops=true,PhysicalJump=false,ActionInterruptible=false;
+ bool AnimationLoops=true,PreviousLoops=true,PhysicalJump=false,ActionInterruptible=false,ActionAllowsMovement=false;
  bool PreviewAnimation=false;
  bool TurningInPlace=false; float TurnElapsed=0,TurnStartYaw=0,TurnTargetYaw=0;
  void BeginTurn(float TargetYaw);
  float ActionElapsed=0,ActionStartTime=0,ActionDuration=0,SlideDistance=0,IdleElapsed=0,JumpElapsed=0;
  FVector ActionVelocity=FVector::ZeroVector,EntryVelocity=FVector::ZeroVector,ActionStartLocation=FVector::ZeroVector;
- bool IsMovementLocked()const{return Action!=EAction::None;}
+ bool IsMovementLocked()const{return Action!=EAction::None&&!ActionAllowsMovement;}
  bool CanAct()const;
  bool StartAction(EAction Kind,const FString& Clip,float Rate=1.f,float StartFraction=0.f,bool Interruptible=false);
  void ClearAction(); void UpdateAction(float Dt); void StartPhysicalJump();
@@ -57,6 +57,10 @@ public:
  UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
  void CreateNetCollision(); void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
  int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
+ FName SprintDribbleFoot=NAME_None,SprintLeadFoot=NAME_None;
+ float SprintContactUntil=0,SprintReleaseUntil=0,SprintNextTouchAt=0,DribbleMinFootClearance=MAX_flt;
+ float SprintDribbleMinDistance=MAX_flt,SprintDribbleMaxDistance=0;
+ bool SprintKickPending=false; int32 SprintDribbleTouchCount=0;
  void Dribble(AFootballPlayer* Player,float Dt);
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
  bool HasBall(const AFootballPlayer* Player)const;
@@ -81,7 +85,7 @@ public:
  bool Charging=false; float ChargeStarted=0; void StartCharge(); void ReleaseCharge(); void FireShot(float Seconds); void UpdateDemo(float Dt);
  int DemoDirection=1,DemoPhase=0; float DemoShotAt=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
- void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
+ void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
  void SlidePressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
  bool SpaceHeld=false,GoalSpacePending=false,GoalCelebrationUsed=true,PendingShot=false,PendingTrip=false;
  bool GoalHoldRequested=false; float MoveForward=0,MoveRight=0;

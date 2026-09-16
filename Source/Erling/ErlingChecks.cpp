@@ -110,10 +110,11 @@ void AFootballController::RunChecks()
         ResetPlayer();PlaceBall();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);SlidePressed();
         Check(TEXT("ball_blocks_slide"),Avatar->Action==AFootballPlayer::EAction::None);
         Avatar->GetCharacterMovement()->StopMovementImmediately();OnGoal(Avatar);JumpPressed();JumpReleased();
-        Check(TEXT("goal_tap_joy_jump"),Avatar->CurrentAnimation==TEXT("JoyJump_Run")&&GoalCelebrationUsed);Wait=2.7f;break;
+        Check(TEXT("goal_tap_standing_jump"),Avatar->CurrentAnimation==TEXT("JoyJump_Standing")&&GoalCelebrationUsed&&Avatar->ActionAllowsMovement);Wait=2.7f;break;
     case 10:
-        OnGoal(Avatar);JumpPressed();SpaceStarted-=1.01f;UpdateActions(.01f);
-        Check(TEXT("goal_hold_random_emote"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation!=TEXT("JoyJump_Run"));
+        ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();SpaceStarted-=1.01f;UpdateActions(.01f);
+        Check(TEXT("goal_hold_running_jump"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run"));
+        Check(TEXT("goal_jump_keeps_movement"),Avatar->ActionAllowsMovement&&!Avatar->IsMovementLocked()&&Avatar->GetVelocity().Size2D()>450.f);
         Screenshot(TEXT("06_Celebration"));Wait=3.2f;break;
     case 11:
         ResetPlayer();GoalCelebrationUsed=false;GoalUntil=GetWorld()->GetTimeSeconds()-.01f;JumpPressed();
@@ -174,22 +175,21 @@ void AFootballController::RunChecks()
         Avatar->StartAction(AFootballPlayer::EAction::Kick,TEXT("Kick_Right"),2.2f);OnGoal(Avatar);JumpPressed();
         Check(TEXT("goal_press_accepted_during_recovery"),GoalSpacePending);Wait=1.1f;break;
     case 32:
-        Check(TEXT("held_goal_after_recovery"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation!=TEXT("JoyJump_Run"));JumpReleased();ResetPlayer();break;
+        Check(TEXT("held_goal_after_recovery"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run")&&Avatar->ActionAllowsMovement);JumpReleased();ResetPlayer();break;
     case 33:
         MoveForward=1;Avatar->StartAction(AFootballPlayer::EAction::Emote,TEXT("Dance_Robot"),1.15f,0,true);Forward(1);
         Check(TEXT("existing_run_does_not_cancel_celebration"),Avatar->Action==AFootballPlayer::EAction::Emote);Forward(0);Forward(1);
         Check(TEXT("new_movement_cancels_ground_emote"),Avatar->Action==AFootballPlayer::EAction::None);Forward(0);ResetPlayer();break;
     case 34:case 36:case 38:case 40:case 42:case 44:
         {
-            ResetPlayer();OnGoal(Avatar);JumpPressed();const int Choice=(TestStage_Latest-34)/2;
-            for(int Seed=0;Seed<1000;Seed++){FMath::RandInit(Seed*104729);if(FMath::RandHelper(6)==Choice){FMath::RandInit(Seed*104729);break;}}
+            ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();
             SpaceStarted-=1.01f;UpdateActions(.01f);JumpReleased();Wait=Avatar->ActionDuration*.5f;break;
         }
     case 35:case 37:case 39:case 41:case 43:case 45:
         {
-            const FString Label=TEXT("held_celebration_visible_")+Avatar->CurrentAnimation;
-            VisiblePose(*Label);Check(TEXT("hold_not_replaced_by_short_jump"),Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation!=TEXT("JoyJump_Run"));
-            Screenshot(*FString::Printf(TEXT("Held_%s"),*Avatar->CurrentAnimation));break;
+            const FString Label=TEXT("held_running_celebration_visible");
+            VisiblePose(*Label);Check(TEXT("held_running_celebration_persists"),Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run")&&Avatar->ActionAllowsMovement);
+            Screenshot(TEXT("Held_JoyJump_Run"));break;
         }
     case 46:
         ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));Wait=.1f;break;
@@ -213,11 +213,14 @@ void AFootballController::RunChecks()
         {const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
         UE_LOG(LogTemp,Display,TEXT("DRIBBLE_RUN player=%f foot=%f"),RunDribbleDistance,FootDistance);
         Check(TEXT("run_dribble_close"),RunDribbleDistance<120.f&&RunDribbleDistance>WalkDribbleDistance-10.f);Check(TEXT("run_dribble_tracks_foot"),FootDistance<90.f);}
-        SprintOn();WalkOn();Wait=1.2f;break;
+        Mode->SprintDribbleTouchCount=0;Mode->DribbleMinFootClearance=MAX_flt;Mode->SprintDribbleMinDistance=MAX_flt;Mode->SprintDribbleMaxDistance=0;SprintOn();WalkOn();Wait=2.4f;break;
     case 52:
         {const float SprintDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
         UE_LOG(LogTemp,Display,TEXT("DRIBBLE_SPRINT player=%f foot=%f"),SprintDistance,FootDistance);
-        Check(TEXT("sprint_dribble_releases_forward"),SprintDistance>RunDribbleDistance+15.f&&SprintDistance<180.f);Check(TEXT("sprint_dribble_still_reaches_foot"),FootDistance<145.f);}
+        Check(TEXT("sprint_dribble_releases_forward"),Mode->SprintDribbleMaxDistance>RunDribbleDistance+20.f&&Mode->SprintDribbleMaxDistance<210.f);
+        Check(TEXT("sprint_dribble_returns_for_touch"),Mode->SprintDribbleMinDistance<110.f&&Mode->SprintDribbleTouchCount>0);
+        Check(TEXT("dribble_never_penetrates_feet"),Mode->DribbleMinFootClearance>=31.5f);
+        Check(TEXT("sprint_touch_reaches_foot_surface"),Mode->DribbleMinFootClearance<=35.5f);}
         Check(TEXT("sprint_dribble_wins_over_ctrl"),Sprint&&WalkHeld&&Avatar->GetCharacterMovement()->MaxWalkSpeed>700.f);
         Forward(0);SprintOff();WalkOff();ResetPlayer();Avatar->ConsumeMovementInputVector();Saved->CameraMode=0;Yaw=0;Mode->Ball->SetWorldLocation(FVector(1500,1000,22),false,nullptr,ETeleportType::TeleportPhysics);
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
@@ -231,7 +234,16 @@ void AFootballController::RunChecks()
         Forward(0);SprintOff();ResetPlayer();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(200,0,0);Move->TurnSkidRemaining=.05f;}Wait=.12f;break;
     case 55:
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Check(TEXT("turn_skid_timer_expires_below_speed_threshold"),Move->TurnSkidRemaining<=0.f);}
-        ResetPlayer();Wait=.1f;break;
+        ResetPlayer();PlaceBall();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=.15f;}StartCharge();Forward(-1);Wait=.08f;break;
+    case 56:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Check(TEXT("shot_charge_disables_turn_skid"),Charging&&Move->TurnSkidRemaining<=0.f);}
+        Charging=false;Forward(0);ResetPlayer();PlaceBall();WalkOn();Forward(1);Wait=.5f;break;
+    case 57:
+        Forward(0);Right(1);Wait=.45f;break;
+    case 58:
+        {const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const float FootD=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_WALK_TURN player=%f foot=%f"),D,FootD);Check(TEXT("walk_dribble_stays_attached_through_turn"),D<95.f&&FootD<70.f);}
+        Right(0);WalkOff();ResetPlayer();Wait=.1f;break;
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
         FPlatformMisc::RequestExit(false);return;
