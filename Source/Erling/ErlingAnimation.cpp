@@ -88,6 +88,16 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
         Acceleration=FVector::ZeroVector;
         return;
     }
+    if(const auto* P=Cast<AFootballPlayer>(CharacterOwner))
+    {
+        if(const auto* PC=Cast<AFootballController>(P->GetController());PC&&PC->Charging)
+        {
+            // Charging/striking must not inherit the sharp-turn glide.
+            TurnSkidRemaining=0.f;LastMoveInputDirection=FVector::ZeroVector;
+            Super::CalcVelocity(Dt,Friction,Fluid,Braking);
+            return;
+        }
+    }
     if(!IsMovingOnGround())
     {
         TurnSkidRemaining=0.f;

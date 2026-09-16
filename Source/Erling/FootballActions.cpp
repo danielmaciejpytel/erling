@@ -15,7 +15,9 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
     Piece->SetAnimInstanceClass(UErlingAnimInstance::StaticClass());
     Piece->AddTickPrerequisiteActor(this);
     Piece->bEnableUpdateRateOptimizations=false;
-    Piece->SetBoundsScale(2.f);
+    // Flip/root motion can move the stylized modular pieces far outside their rest bounds.
+    // A generous dynamic bound prevents one-frame component culling during the airborne flip.
+    Piece->SetBoundsScale(4.f);
 }
 bool AFootballPlayer::CanAct()const
 {
@@ -29,7 +31,7 @@ bool AFootballPlayer::StartAction(EAction Kind,const FString& Clip,float Rate,fl
     EntryVelocity=GetVelocity();EntryVelocity.Z=0;ActionStartLocation=GetActorLocation();
     SetAnimation(Clip,false);PlaybackRate=Rate;AnimationTime=Sequence->GetPlayLength()*StartFraction;
     ActionStartTime=AnimationTime;ActionDuration=(Sequence->GetPlayLength()-AnimationTime)/Rate;
-    ActionElapsed=0;Action=Kind;ActionInterruptible=Interruptible;PhysicalJump=false;
+    ActionElapsed=0;Action=Kind;ActionInterruptible=Interruptible;ActionAllowsMovement=false;PhysicalJump=false;
     ActionVelocity=FVector::ZeroVector;GetCharacterMovement()->bOrientRotationToMovement=false;
     ConsumeMovementInputVector();StopJumping();
     return true;
@@ -38,7 +40,7 @@ void AFootballPlayer::ClearAction()
 {
     const bool WasSlide=Action==EAction::Slide;
     TurningInPlace=false;
-    Action=EAction::None;ActionElapsed=0;ActionVelocity=FVector::ZeroVector;ActionInterruptible=false;
+    Action=EAction::None;ActionElapsed=0;ActionVelocity=FVector::ZeroVector;ActionInterruptible=false;ActionAllowsMovement=false;
     if(WasSlide){auto& Velocity=GetCharacterMovement()->Velocity;Velocity.X=0;Velocity.Y=0;}
     GetCharacterMovement()->bOrientRotationToMovement=true;KickUntil=0;PlaybackRate=1;
 }
@@ -173,14 +175,16 @@ void AFootballController::BeginCelebration(bool Held)
     if(GoalCelebrationUsed||!Avatar){GoalSpacePending=false;return;}
     if(!Avatar->CanAct())return;
     GoalSpacePending=false;
-    FString Clip=TEXT("JoyJump_Run");
-    bool Interruptible=false;
-    if(Held)
+    const FString Clip=Held?TEXT("JoyJump_Run"):TEXT("JoyJump_Standing");
+    const float StartFraction=Held?.25f:0.f;
+    if(Avatar->StartAction(AFootballPlayer::EAction::Emote,Clip,1.15f,StartFraction,false))
     {
-        static const TCHAR* Choices[]={TEXT("JoyJump_Standing"),TEXT("Celebrate_Victory"),TEXT("Dance_Disco"),TEXT("Dance_Robot"),TEXT("Meme_RageStomp"),TEXT("Meme_Shrug")};
-        Clip=Choices[FMath::RandHelper(UE_ARRAY_COUNT(Choices))];Interruptible=Clip!=TEXT("JoyJump_Standing");
+        // Goal jumps are celebrations, not roots that pin the player to the grass.
+        // Keep normal CharacterMovement active so an already-running player carries on.
+        Avatar->ActionAllowsMovement=true;
+        Avatar->GetCharacterMovement()->bOrientRotationToMovement=true;
+        GoalCelebrationUsed=true;
     }
-    if(Avatar->StartAction(AFootballPlayer::EAction::Emote,Clip,1.15f,Clip==TEXT("JoyJump_Run")?.25f:0.f,Interruptible))GoalCelebrationUsed=true;
 }
 void AFootballController::CancelPendingActions()
 {
