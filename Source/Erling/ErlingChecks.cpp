@@ -21,6 +21,8 @@ void AFootballController::RunChecks()
     static int DemoShots=0;
     static bool DemoLeft=false,DemoRight=false,DemoWasPending=false;
     static FVector LastDemoBall=FVector::ZeroVector;
+    static int PreviousDemoPhase=0,DemoTurns=0;
+    static bool DemoTurnsPromptly=true,DemoKeepsShotInFlight=true;
     if(Avatar&&Avatar->PhysicalJump&&Avatar->JumpElapsed>.03f)
     {
         const float Offset=Avatar->GetMesh()->GetSocketLocation(TEXT("root")).Z-(Avatar->GetActorLocation().Z-96);
@@ -30,6 +32,13 @@ void AFootballController::RunChecks()
     if(TestStage_Latest==49&&Avatar)
     {
         auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();
+        if(PreviousDemoPhase==1&&DemoPhase==3)
+        {
+            DemoTurns++;DemoTurnsPromptly&=Now-DemoShotAt<.85f;
+            DemoKeepsShotInFlight&=M->ShotInFlight&&!PendingShot;
+            UE_LOG(LogTemp,Display,TEXT("DEMO_TURN delay_from_shot_start=%f x=%f"),Now-DemoShotAt,Avatar->GetActorLocation().X);
+        }
+        PreviousDemoPhase=DemoPhase;
         if(PendingShot&&!DemoWasPending)
         {
             DemoShots++;DemoLeft|=Avatar->CurrentAnimation==TEXT("Kick_Left");DemoRight|=Avatar->CurrentAnimation==TEXT("Kick_Right");
@@ -40,7 +49,7 @@ void AFootballController::RunChecks()
         DemoWasPending=PendingShot;LastDemoBall=M->Ball->GetComponentLocation();
     }
     if(TestStage_Latest==19||TestStage_Latest==20)Forward(1);
-    if(TestAt==0){TestAt=Now+4;return;}
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -185,6 +194,8 @@ void AFootballController::RunChecks()
     case 47:Wait=.1f;break;
     case 48:Wait=13.f;break;
     case 49:
+        Check(TEXT("demo_turns_without_extra_run"),DemoTurns>=2&&DemoTurnsPromptly);
+        Check(TEXT("demo_turn_preserves_ball_flight"),DemoTurns>=2&&DemoKeepsShotInFlight);
         Check(TEXT("demo_receives_and_runs_two_steps"),DemoShots>=2&&DemoTwoSteps);
         Check(TEXT("demo_uses_both_feet"),DemoLeft&&DemoRight);
         Check(TEXT("demo_ball_windup_continuous"),DemoContinuous);Screenshot(TEXT("14_Demo"));break;
