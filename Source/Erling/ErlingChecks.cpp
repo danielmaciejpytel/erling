@@ -18,6 +18,7 @@ void AFootballController::RunChecks()
 {
     const double Now=GetWorld()->GetTimeSeconds();
     static bool JumpModelVisible=true,DemoTwoSteps=true,DemoContinuous=true;
+    static float WalkDribbleDistance=0.f,RunDribbleDistance=0.f;
     static int DemoShots=0;
     static bool DemoLeft=false,DemoRight=false,DemoWasPending=false;
     static FVector LastDemoBall=FVector::ZeroVector;
@@ -48,7 +49,7 @@ void AFootballController::RunChecks()
         if(PendingShot&&DemoWasPending)DemoContinuous&=FVector::Dist(LastDemoBall,M->Ball->GetComponentLocation())<60;
         DemoWasPending=PendingShot;LastDemoBall=M->Ball->GetComponentLocation();
     }
-    if(TestStage_Latest==19||TestStage_Latest==20)Forward(1);
+    if(TestStage_Latest==19||TestStage_Latest==20||TestStage_Latest==50||TestStage_Latest==51||TestStage_Latest==52)Forward(1);
     if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
@@ -76,9 +77,10 @@ void AFootballController::RunChecks()
     case 1:
         Screenshot(TEXT("01_Creator"));Check(TEXT("wardrobe_complete"),Avatar->Pieces.Num()==7&&Catalog.Num()==5);
         for(auto* P:Avatar->Pieces)if(P->GetSkeletalMeshAsset()->GetName()==TEXT("SK_shirt"))Check(TEXT("shirt_correctives_imported"),P->GetSkeletalMeshAsset()->GetMorphTargets().Num()>3800);
-        ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();FlipChance=1;Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);TestPosition=Avatar->GetActorLocation();FireShot(1.f);
+        ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();Avatar->SetActorRotation(FRotator(0,8,0));Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);TestPosition=Avatar->GetActorLocation();FireShot(1.f);
         Check(TEXT("flip_twice_as_fast"),FMath::IsNearlyEqual(Avatar->PlaybackRate,2.6f));
-        Check(TEXT("underbar_selects_flip"),Avatar->Action==AFootballPlayer::EAction::Flip);Wait=.55f;break;
+        Check(TEXT("underbar_selects_flip"),Avatar->Action==AFootballPlayer::EAction::Flip);
+        Check(TEXT("perfect_underbar_flip_without_goal_requirement"),Avatar->Action==AFootballPlayer::EAction::Flip&&FMath::Abs(PendingAimTarget.Y)>320.f);Wait=.55f;break;
     case 2:
         Check(TEXT("flip_releases_ball_at_contact"),Mode->ShotInFlight&&!PendingShot);
         Check(TEXT("flip_locks_movement"),Avatar->IsMovementLocked());Screenshot(TEXT("02_FlipStart"));Wait=.9f;break;
@@ -124,11 +126,11 @@ void AFootballController::RunChecks()
     case 14:
         Check(TEXT("back_fall_chains_getup"),Avatar->Action==AFootballPlayer::EAction::GetUp&&Avatar->CurrentAnimation==TEXT("GetUp_Back"));Wait=2.f;break;
     case 15:
-        Check(TEXT("getup_unlocks"),!Avatar->IsMovementLocked());ResetPlayer();PlaceBall();TripChance=0;FlipChance=0;FireShot(1.f);
+        Check(TEXT("getup_unlocks"),!Avatar->IsMovementLocked());ResetPlayer();PlaceBall();TripChance=0;FireShot(.5f);
         Check(TEXT("normal_shot_no_special"),Avatar->Action==AFootballPlayer::EAction::Kick&&!PendingTrip);Wait=.45f;break;
     case 16:
         Check(TEXT("normal_shot_contact"),Mode->ShotInFlight&&!PendingShot);ResetPlayer();OnGoal(nullptr);GoalCelebrationUsed=true;OnGoal(nullptr);
-        Check(TEXT("other_scorer_no_reward"),GoalCelebrationUsed);TripChance=.33f;FlipChance=.5f;
+        Check(TEXT("other_scorer_no_reward"),GoalCelebrationUsed);TripChance=.33f;
         ChangeScreen(EScreen::Editor);Selection={1,3,1,1,1};Avatar->ApplyKit(Selection,Catalog);Wait=1.f;break;
     case 17:
         Screenshot(TEXT("08_CreatorFinal"));
@@ -198,7 +200,38 @@ void AFootballController::RunChecks()
         Check(TEXT("demo_turn_preserves_ball_flight"),DemoTurns>=2&&DemoKeepsShotInFlight);
         Check(TEXT("demo_receives_and_runs_two_steps"),DemoShots>=2&&DemoTwoSteps);
         Check(TEXT("demo_uses_both_feet"),DemoLeft&&DemoRight);
-        Check(TEXT("demo_ball_windup_continuous"),DemoContinuous);Screenshot(TEXT("14_Demo"));break;
+        Check(TEXT("demo_ball_windup_continuous"),DemoContinuous);Screenshot(TEXT("14_Demo"));
+        ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();WalkOn();Wait=1.2f;break;
+    case 50:
+        WalkDribbleDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        {const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_WALK player=%f foot=%f"),WalkDribbleDistance,FootDistance);
+        Check(TEXT("walk_dribble_close"),WalkDribbleDistance<105.f);Check(TEXT("walk_dribble_tracks_foot"),FootDistance<80.f);}
+        WalkOff();Wait=1.2f;break;
+    case 51:
+        RunDribbleDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        {const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_RUN player=%f foot=%f"),RunDribbleDistance,FootDistance);
+        Check(TEXT("run_dribble_close"),RunDribbleDistance<120.f&&RunDribbleDistance>WalkDribbleDistance-10.f);Check(TEXT("run_dribble_tracks_foot"),FootDistance<90.f);}
+        SprintOn();WalkOn();Wait=1.2f;break;
+    case 52:
+        {const float SprintDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_SPRINT player=%f foot=%f"),SprintDistance,FootDistance);
+        Check(TEXT("sprint_dribble_releases_forward"),SprintDistance>RunDribbleDistance+15.f&&SprintDistance<180.f);Check(TEXT("sprint_dribble_still_reaches_foot"),FootDistance<145.f);}
+        Check(TEXT("sprint_dribble_wins_over_ctrl"),Sprint&&WalkHeld&&Avatar->GetCharacterMovement()->MaxWalkSpeed>700.f);
+        Forward(0);SprintOff();WalkOff();ResetPlayer();Avatar->ConsumeMovementInputVector();Saved->CameraMode=0;Yaw=0;Mode->Ball->SetWorldLocation(FVector(1500,1000,22),false,nullptr,ETeleportType::TeleportPhysics);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
+    case 53:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());UE_LOG(LogTemp,Display,TEXT("TURN_SKID remaining=%f velocity=%s input=%s mode=%d"),Move->TurnSkidRemaining,*Move->Velocity.ToString(),*Move->LastMoveInputDirection.ToString(),int32(Move->MovementMode));Check(TEXT("sharp_turn_starts_momentum_skid"),Move->TurnSkidRemaining>0.f);Check(TEXT("sharp_turn_keeps_some_momentum"),Move->Velocity.X>250.f);}
+        Forward(0);ResetPlayer();PitchCameraLeadX=160.f;Avatar->GetCharacterMovement()->Velocity=FVector(-765,0,0);{const float Before=PitchCameraLeadX;UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_lead_does_not_snap_on_direction_change"),PitchCameraLeadX>0.f&&FMath::Abs(PitchCameraLeadX-Before)<40.f);}
+        Avatar->StartAction(AFootballPlayer::EAction::Kick,TEXT("Kick_Right"),2.2f);Avatar->EntryVelocity=FVector(510,0,0);Avatar->GetCharacterMovement()->Velocity=FVector::ZeroVector;PitchCameraLeadX=100.f;UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_keeps_shot_momentum"),PitchCameraLeadX>=100.f);Avatar->ClearAction();
+        ResetPlayer();Avatar->ConsumeMovementInputVector();Saved->CameraMode=0;Yaw=0;SprintOn();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
+    case 54:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());UE_LOG(LogTemp,Display,TEXT("SPRINT_TURN_SKID remaining=%f velocity=%s"),Move->TurnSkidRemaining,*Move->Velocity.ToString());Check(TEXT("sprint_sharp_turn_skid"),Move->TurnSkidRemaining>.1f);Check(TEXT("sprint_turn_carries_more_momentum"),Move->Velocity.X>500.f);}
+        Forward(0);SprintOff();ResetPlayer();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(200,0,0);Move->TurnSkidRemaining=.05f;}Wait=.12f;break;
+    case 55:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Check(TEXT("turn_skid_timer_expires_below_speed_threshold"),Move->TurnSkidRemaining<=0.f);}
+        ResetPlayer();Wait=.1f;break;
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
         FPlatformMisc::RequestExit(false);return;

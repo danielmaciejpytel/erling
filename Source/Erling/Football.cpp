@@ -150,9 +150,32 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  const FVector Pos=Ball->GetComponentLocation(),Base=Player->GetActorLocation();FVector To=Pos-Base;To.Z=0;
  const float Speed=Player->GetVelocity().Size2D();if(Speed<25||To.Size()>200||Pos.Z>Base.Z-35)return;
  const FVector Direction=Player->GetVelocity().GetSafeNormal2D();if(FVector::DotProduct(To.GetSafeNormal(),Direction)<-.25f)return;
- ShotInFlight=false;Ball->SetLinearDamping(.3f);const FVector Target=Base+Direction*(110+Speed*.035f);FVector Correction=Target-Pos;Correction.Z=0;
- FVector Desired=Player->GetVelocity()+Correction*8;Desired.Z=0;Desired=Desired.GetClampedToMaxSize(Speed+220);
- const FVector Current=Ball->GetPhysicsLinearVelocity();FVector V=FMath::VInterpTo(Current,Desired,Dt,18);V.Z=FMath::Clamp(Current.Z,-180.f,30.f);
+ const auto* PC=Cast<AFootballController>(Player->GetController());
+ const bool Sprinting=PC&&PC->Sprint&&Speed>560.f;
+ const bool Walking=PC&&PC->WalkHeld&&!Sprinting;
+ const float PlayerDistance=Walking?72.f:Sprinting?137.f:92.f;
+ const float FootGap=Walking?26.f:Sprinting?92.f:36.f;
+ const float FootInfluence=Walking?.88f:Sprinting?.38f:.76f;
+ const float CorrectionGain=Walking?11.f:Sprinting?7.5f:9.5f;
+ const float ExtraSpeed=Walking?140.f:Sprinting?250.f:190.f;
+ const float FollowSpeed=Walking?21.f:Sprinting?14.f:18.f;
+
+ FVector FootAnchor=Base+Direction*(PlayerDistance-FootGap);
+ if(Player->GetMesh()&&Player->GetMesh()->DoesSocketExist(TEXT("foot_l"))&&Player->GetMesh()->DoesSocketExist(TEXT("foot_r")))
+ {
+  FVector Left=Player->GetMesh()->GetSocketLocation(TEXT("foot_l"));
+  FVector Right=Player->GetMesh()->GetSocketLocation(TEXT("foot_r"));
+  const float LeftForward=FVector::DotProduct(Left-Base,Direction);
+  const float RightForward=FVector::DotProduct(Right-Base,Direction);
+  const float LeftWeight=FMath::Clamp(.5f+(LeftForward-RightForward)/42.f,0.f,1.f);
+  FootAnchor=FMath::Lerp(Right,Left,LeftWeight);FootAnchor.Z=Base.Z;
+ }
+ const FVector PlayerTarget=Base+Direction*PlayerDistance;
+ const FVector FootTarget=FootAnchor+Direction*FootGap;
+ const FVector Target=FMath::Lerp(PlayerTarget,FootTarget,FootInfluence);
+ ShotInFlight=false;Ball->SetLinearDamping(.3f);FVector Correction=Target-Pos;Correction.Z=0;
+ FVector Desired=Player->GetVelocity()+Correction*CorrectionGain;Desired.Z=0;Desired=Desired.GetClampedToMaxSize(Speed+ExtraSpeed);
+ const FVector Current=Ball->GetPhysicsLinearVelocity();FVector V=FMath::VInterpTo(Current,Desired,Dt,FollowSpeed);V.Z=FMath::Clamp(Current.Z,-180.f,30.f);
  Ball->SetPhysicsLinearVelocity(V);Ball->SetPhysicsAngularVelocityInRadians(FVector(-V.Y/22,V.X/22,0));
 }
 void AFootballMode::Tick(float Dt){Super::Tick(Dt);if(!Ball)return;auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController());if(!PC||PC->Screen!=AFootballController::EScreen::Game)return;
@@ -194,10 +217,10 @@ void AFootballController::FireShot(float Seconds)
  PendingHasAim=CrossingHeight>=0&&FMath::Abs(CrossingSide)<5000;
  PendingAimTarget=FVector(PendingVelocity.X>=0?2740.f:-2740.f,CrossingSide,CrossingHeight);
  const bool Aimed=FMath::Abs(CrossingSide)<319;
- const bool UnderBar=Aimed&&PendingVelocity.Size2D()>=2600&&CrossingHeight>=180&&CrossingHeight<=228;
+ const bool UnderBar=PendingVelocity.Size2D()>=2600&&CrossingHeight>=180&&CrossingHeight<=228;
  const bool AboveBar=Aimed&&Seconds>=1.35f&&CrossingHeight-22>269;
- // Mutually exclusive outcomes: one draw per eligible shot, never per frame.
- const bool Flip=!Demo&&UnderBar&&FMath::FRand()<FlipChance;
+ // Perfect under-bar timing immediately selects the flip, regardless of whether the shot eventually scores.
+ const bool Flip=!Demo&&UnderBar;
  PendingTrip=!Demo&&AboveBar&&FMath::FRand()<TripChance;
  const bool Left=FVector::DotProduct(BallPosition-Avatar->GetActorLocation(),Avatar->GetActorRightVector())<0;
  const FString Clip=Flip?TEXT("Shot_Flip_Land"):Left?TEXT("Kick_Left"):TEXT("Kick_Right");
@@ -220,7 +243,7 @@ void AFootballController::Reset(){if(Screen==EScreen::Game&&Avatar&&Avatar->IsMo
 void AFootballController::PauseToggle(){if(Screen==EScreen::Game)ChangeScreen(EScreen::Pause);else if(Screen==EScreen::Pause)ChangeScreen(EScreen::Game);else if(Screen==EScreen::Settings)ChangeScreen(SettingsReturn);else if(Screen==EScreen::Editor)BackFromEditor();else if(Screen==EScreen::Credits)ChangeScreen(EScreen::Main);}
 void AFootballController::ChangeScreen(EScreen Next){const auto Old=Screen;WalkOff();if(Avatar){Avatar->PreviewAnimation=false;PreviewIndex=-1;}Screen=Next;Charging=false;GoalSpacePending=false;SpaceHeld=false;if(Next==EScreen::Editor||Next==EScreen::Main){CancelPendingActions();if(Avatar){Avatar->ClearAction();Avatar->PhysicalJump=false;}GoalCelebrationUsed=true;}SetPause(Next==EScreen::Pause||(Next==EScreen::Settings&&SettingsReturn==EScreen::Pause));SprintOff();
  if(Next==EScreen::Editor){EditorZoom=0;Dragging=false;DraftBefore=Selection;Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator(0,-35,0));Avatar->KickUntil=0;Avatar->SetAnimation(TEXT("Idle_Breathe"));Reset();}
- if(Next==EScreen::Game&&Old!=EScreen::Pause&&!(Old==EScreen::Settings&&SettingsReturn==EScreen::Pause)){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;Reset();}
+ if(Next==EScreen::Game&&Old!=EScreen::Pause&&!(Old==EScreen::Settings&&SettingsReturn==EScreen::Pause)){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;PitchCameraLeadX=0;Reset();}
  if(Next==EScreen::Main&&Old!=EScreen::Credits){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?4:0;DemoDirection=DemoPhase==4?(X>=0?1:-1):(X>0?-1:1);Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
 void AFootballController::Cycle(int32 C,int32 Direction){if(!Catalog.IsValidIndex(C)||Catalog[C].Options.IsEmpty())return;Selection[C]=(Selection[C]+Direction+Catalog[C].Options.Num())%Catalog[C].Options.Num();Avatar->ApplyKit(Selection,Catalog);Toast.Empty();}
 void AFootballController::SaveAppearance(){Saved->Appearance=Selection;const bool Ok=UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);if(Ok)DraftBefore=Selection;Toast=Ok?TEXT("Appearance saved"):TEXT("Failed to save appearance");ToastUntil=GetWorld()->GetTimeSeconds()+4;}
@@ -239,7 +262,8 @@ void AFootballController::Tick(float Dt){Super::Tick(Dt);UpdateActions(Dt);if(FP
   else if(Mode==1)CameraPivot=P;
   else CameraPivot=FMath::VInterpTo(CameraPivot,P,Dt,5.5f);
   if(Mode==2){
-   const float LeadX=FMath::Clamp(Avatar->GetVelocity().X*.22f,-260.f,260.f);const FVector Center=CameraPivot+FVector(LeadX,0,0);
+   UpdatePitchCameraLead(Dt);
+   const FVector Center=CameraPivot+FVector(PitchCameraLeadX,0,0);
    Cam=Center+FVector(0,1500,1050);Target=Center+FVector(0,-280,70);Fov=68;
   }else{
    const float TopDown=FMath::Clamp((-Pitch-15.f)/25.f,0.f,1.f);const float LookAhead=FMath::Lerp(350.f,180.f,TopDown);const FVector ForwardDir=FRotator(0,Yaw,0).Vector();
@@ -265,7 +289,7 @@ void AFootballController::BuildUI(){if(!GEngine||!GEngine->GameViewport)return;i
  else if(Screen==EScreen::Credits){Add(Text(TEXT("CREDITS"),32));Add(Text(TEXT("Daniel Maciej Pytel"),23,Mint));Add(Text(TEXT("A project I created"),17));Add(Text(TEXT("for my portfolio in 2026."),17));
  auto Link=[](const TCHAR* Label,const TCHAR* Url,FLinearColor Color){return SNew(SBox).WidthOverride(106).HeightOverride(106)[SNew(SButton).ContentPadding(FMargin(4)).ButtonColorAndOpacity(Color).HAlign(HAlign_Center).VAlign(VAlign_Center).OnClicked_Lambda([Url](){ClickSound();FPlatformProcess::LaunchURL(Url,nullptr,nullptr);return FReply::Handled();})[Text(Label,13)]];};
  Add(SNew(SHorizontalBox)+SHorizontalBox::Slot().AutoWidth().Padding(0,8,8,16)[Link(TEXT("ArtStation"),TEXT("https://www.artstation.com/danielmaciejpytel"),FLinearColor(.02f,.3f,.55f))]+SHorizontalBox::Slot().AutoWidth().Padding(0,8,8,16)[Link(TEXT("GitHub"),TEXT("https://github.com/danielmaciejpytel"),FLinearColor(.3f,.13f,.5f))]+SHorizontalBox::Slot().AutoWidth().Padding(0,8,0,16)[Link(TEXT("LinkedIn"),TEXT("https://www.linkedin.com/in/danielmaciejpytel/"),FLinearColor(.015f,.2f,.4f))]);Add(Button(TEXT("← Back"),[this](){ChangeScreen(EScreen::Main);}));}
- else if(Screen==EScreen::Settings){Add(Text(TEXT("SETTINGS"),32));Add(Text(TEXT("Music Volume"),18));Add(SNew(SSlider).Value(Saved->Volume).OnValueChanged_Lambda([this](float V){UpdateMusicVolume(V);}));Add(Text(TEXT("Effects Volume"),18));Add(SNew(SSlider).Value(Saved->EffectsVolume).OnValueChanged_Lambda([this](float V){UpdateEffectsVolume(V);}));Add(Text(TEXT("Mouse Sensitivity"),18));Add(SNew(SSlider).Value((Saved->Sensitivity-.3f)/2.7f).OnValueChanged_Lambda([this](float V){Saved->Sensitivity=.3f+V*2.7f;}));const TCHAR* CameraLabel=Saved->CameraMode==1?TEXT("Reduced"):Saved->CameraMode==2?TEXT("Pitch"):TEXT("Smooth");Add(Button(FString::Printf(TEXT("Camera Movement: %s"),CameraLabel),[this](){Saved->CameraMode=(Saved->CameraMode+1)%3;Saved->ReducedMotion=Saved->CameraMode==1;CameraPivotInitialized=false;BuildUI();}));Add(Button(FString::Printf(TEXT("Graphics Quality: %d / 4"),Saved->Quality+1),[this](){Saved->Quality=(Saved->Quality+1)%4;ApplyQuality();BuildUI();}));Add(Button(TEXT("Save and Back"),[this](){SaveSettings();ChangeScreen(SettingsReturn);},true));}
+ else if(Screen==EScreen::Settings){Add(Text(TEXT("SETTINGS"),32));Add(Text(TEXT("Music Volume"),18));Add(SNew(SSlider).Value(Saved->Volume).OnValueChanged_Lambda([this](float V){UpdateMusicVolume(V);}));Add(Text(TEXT("Effects Volume"),18));Add(SNew(SSlider).Value(Saved->EffectsVolume).OnValueChanged_Lambda([this](float V){UpdateEffectsVolume(V);}));Add(Text(TEXT("Mouse Sensitivity"),18));Add(SNew(SSlider).Value((Saved->Sensitivity-.3f)/2.7f).OnValueChanged_Lambda([this](float V){Saved->Sensitivity=.3f+V*2.7f;}));const TCHAR* CameraLabel=Saved->CameraMode==1?TEXT("Reduced"):Saved->CameraMode==2?TEXT("Pitch"):TEXT("Smooth");Add(Button(FString::Printf(TEXT("Camera Movement: %s"),CameraLabel),[this](){Saved->CameraMode=(Saved->CameraMode+1)%3;Saved->ReducedMotion=Saved->CameraMode==1;CameraPivotInitialized=false;PitchCameraLeadX=0;BuildUI();}));Add(Button(FString::Printf(TEXT("Graphics Quality: %d / 4"),Saved->Quality+1),[this](){Saved->Quality=(Saved->Quality+1)%4;ApplyQuality();BuildUI();}));Add(Button(TEXT("Save and Back"),[this](){SaveSettings();ChangeScreen(SettingsReturn);},true));}
  if(Screen!=EScreen::Game){Root->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(FMargin(36,20,0,90))[SNew(SBox).WidthOverride(420).MaxDesiredHeight(780)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Ink).Padding(28)[SNew(SScrollBox)+SScrollBox::Slot()[Panel]]]];}
  else{Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Ink).Padding(16)[SNew(STextBlock).Text_Lambda([this](){auto M=GetWorld()->GetAuthGameMode<AFootballMode>();return FText::FromString(FString::Printf(TEXT("GOALS  %02d"),M?M->Goals:0));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",26)).ColorAndOpacity(Mint)]];Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(20)[Text(TEXT("WASD  move   CTRL  walk   SHIFT  sprint     SPACE  jump     Hold / release LMB  shoot     RMB  slide     R  reset ball     ESC  pause"),16)];}
  Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0,95,0,0)[SNew(STextBlock).Text_Lambda([this](){if(Screen==EScreen::Game&&Charging){float C=FMath::Min(1.5f,GetWorld()->GetTimeSeconds()-ChargeStarted);return FText::FromString(FString::Printf(TEXT("SHOT  %.1f s  ·  %s"),C,C>=1.35f?TEXT("OVER THE BAR!"):C>=.85f&&C<=1.02f?TEXT("UNDER THE BAR"):C>=.35f?TEXT("POWER SHOT"):TEXT("PASS")));}if(Screen==EScreen::Game&&!GoalCelebrationUsed&&GetWorld()->GetTimeSeconds()<GoalUntil)return FText::FromString(FString::Printf(TEXT("SPACE: hop  |  hold 1 s: celebrate  ·  %.0f s"),FMath::CeilToFloat(GoalUntil-GetWorld()->GetTimeSeconds())));return FText::FromString(GetWorld()->GetTimeSeconds()<ToastUntil?Toast:TEXT(""));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",24)).ColorAndOpacity(Mint)];UI=Root;GEngine->GameViewport->AddViewportWidgetContent(UI.ToSharedRef(),10);
@@ -406,6 +430,16 @@ void AFootballController::UpdateDemo(float Dt){
    FireShot(1.f);if(PendingShot){DemoPhase=1;DemoShotAt=T;}
   }
  }
+}
+
+float AFootballController::UpdatePitchCameraLead(float Dt)
+{
+ if(!Avatar)return PitchCameraLeadX;
+ const bool ShotAction=Avatar->Action==AFootballPlayer::EAction::Kick||Avatar->Action==AFootballPlayer::EAction::Flip;
+ const float LeadVelocityX=ShotAction?Avatar->EntryVelocity.X:Avatar->GetVelocity().X;
+ const float DesiredLeadX=FMath::Clamp(LeadVelocityX*.22f,-260.f,260.f);
+ PitchCameraLeadX=FMath::FInterpTo(PitchCameraLeadX,DesiredLeadX,Dt,4.5f);
+ return PitchCameraLeadX;
 }
 
 void AFootballPlayer::Landed(const FHitResult& Hit){

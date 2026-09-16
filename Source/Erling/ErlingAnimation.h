@@ -19,5 +19,7 @@ class ERLING_API UErlingMovement : public UCharacterMovementComponent
 {
     GENERATED_BODY()
 public:
+    FVector LastMoveInputDirection=FVector::ZeroVector;
+    float TurnSkidRemaining=0.f;
     virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
 };
