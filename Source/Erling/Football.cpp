@@ -219,7 +219,7 @@ void AFootballController::PauseToggle(){if(Screen==EScreen::Game)ChangeScreen(ES
 void AFootballController::ChangeScreen(EScreen Next){const auto Old=Screen;WalkOff();if(Avatar){Avatar->PreviewAnimation=false;PreviewIndex=-1;}Screen=Next;Charging=false;GoalSpacePending=false;SpaceHeld=false;if(Next==EScreen::Editor||Next==EScreen::Main){CancelPendingActions();if(Avatar){Avatar->ClearAction();Avatar->PhysicalJump=false;}GoalCelebrationUsed=true;}SetPause(Next==EScreen::Pause||(Next==EScreen::Settings&&SettingsReturn==EScreen::Pause));SprintOff();
  if(Next==EScreen::Editor){EditorZoom=0;Dragging=false;DraftBefore=Selection;Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator(0,-35,0));Avatar->KickUntil=0;Avatar->SetAnimation(TEXT("Idle_Breathe"));Reset();}
  if(Next==EScreen::Game&&Old!=EScreen::Pause&&!(Old==EScreen::Settings&&SettingsReturn==EScreen::Pause)){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;Reset();}
- if(Next==EScreen::Main&&Old!=EScreen::Credits){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?1:0;DemoDirection=DemoPhase==1?(X>=0?1:-1):(X>0?-1:1);Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
+ if(Next==EScreen::Main&&Old!=EScreen::Credits){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?4:0;DemoDirection=DemoPhase==4?(X>=0?1:-1):(X>0?-1:1);Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
 void AFootballController::Cycle(int32 C,int32 Direction){if(!Catalog.IsValidIndex(C)||Catalog[C].Options.IsEmpty())return;Selection[C]=(Selection[C]+Direction+Catalog[C].Options.Num())%Catalog[C].Options.Num();Avatar->ApplyKit(Selection,Catalog);Toast.Empty();}
 void AFootballController::SaveAppearance(){Saved->Appearance=Selection;const bool Ok=UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);if(Ok)DraftBefore=Selection;Toast=Ok?TEXT("Appearance saved"):TEXT("Failed to save appearance");ToastUntil=GetWorld()->GetTimeSeconds()+4;}
 void AFootballController::BackFromEditor(){Selection=DraftBefore;Avatar->ApplyKit(Selection,Catalog);ChangeScreen(EScreen::Main);}
@@ -269,6 +269,8 @@ void AFootballController::BuildUI(){if(!GEngine||!GEngine->GameViewport)return;i
  Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0,95,0,0)[SNew(STextBlock).Text_Lambda([this](){if(Screen==EScreen::Game&&Charging){float C=FMath::Min(1.5f,GetWorld()->GetTimeSeconds()-ChargeStarted);return FText::FromString(FString::Printf(TEXT("SHOT  %.1f s  ·  %s"),C,C>=1.35f?TEXT("OVER THE BAR!"):C>=.85f&&C<=1.02f?TEXT("UNDER THE BAR"):C>=.35f?TEXT("POWER SHOT"):TEXT("PASS")));}if(Screen==EScreen::Game&&!GoalCelebrationUsed&&GetWorld()->GetTimeSeconds()<GoalUntil)return FText::FromString(FString::Printf(TEXT("SPACE: hop  |  hold 1 s: celebrate  ·  %.0f s"),FMath::CeilToFloat(GoalUntil-GetWorld()->GetTimeSeconds())));return FText::FromString(GetWorld()->GetTimeSeconds()<ToastUntil?Toast:TEXT(""));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",24)).ColorAndOpacity(Mint)];UI=Root;GEngine->GameViewport->AddViewportWidgetContent(UI.ToSharedRef(),10);
 }
 void AFootballController::RunProjectChecks(){
+ static bool DemoReturned=false,DemoShotFacedGoal=false;
+ if(TestStage==27||TestStage==28){DemoReturned|=DemoDirection==-1;if(PendingShot)DemoShotFacedGoal|=Avatar->GetActorForwardVector().X*DemoDirection>.9f;}
 #if WITH_EDITOR
  if(FAssetCompilingManager::Get().GetNumRemainingAssets()>0)return;
 #endif
@@ -310,7 +312,7 @@ void AFootballController::RunProjectChecks(){
  case 25:Shot(TEXT("11_Credits"));break;
  case 26:ChangeScreen(EScreen::Main);DemoDirection=1;DemoPhase=0;Mode->ResetBall();Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorRotation(FRotator::ZeroRotator);Avatar->SetActorLocation(FVector(-350,0,98));break;
  case 27:Shot(TEXT("12_Demo_Right"));break;
- case 28:Check(TEXT("demo_alternates"),DemoDirection==-1);Check(TEXT("demo_faces_shot"),Avatar->GetActorForwardVector().X*DemoDirection>.9f);Shot(TEXT("13_Demo_Left"));break;
+ case 28:Check(TEXT("demo_alternates"),DemoReturned);Check(TEXT("demo_faces_shot"),DemoShotFacedGoal);Shot(TEXT("13_Demo_Left"));break;
  case 29:ChangeScreen(EScreen::Game);Mode->ResetBall();Mode->Scored=true;Mode->Ball->SetWorldLocation(FVector(2800,0,160),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(3200,0,0));break;
  case 30:Check(TEXT("net_stops_ball"),Mode->Ball->GetComponentLocation().X<2980&&Mode->Ball->GetComponentLocation().X>2800&&Mode->Ball->GetPhysicsLinearVelocity().Size2D()<100);Check(TEXT("net_ball_lands"),Mode->Ball->GetComponentLocation().Z<40);Check(TEXT("all_effects_loaded"),Effects.Num()==5&&Effects.FindRef(TEXT("jump"))&&Effects.FindRef(TEXT("kick"))&&Effects.FindRef(TEXT("fail"))&&Effects.FindRef(TEXT("click")));UpdateEffectsVolume(.5f);PlayEffect(TEXT("goal"),1.5f);Check(TEXT("goal_gain_150_percent"),!ActiveEffects.IsEmpty()&&FMath::IsNearlyEqual(ActiveEffects.Last()->VolumeMultiplier,.75f));UpdateEffectsVolume(0);Check(TEXT("effects_mute"),!ActiveEffects.IsEmpty()&&ActiveEffects.Last()->VolumeMultiplier==0);Check(TEXT("effects_do_not_mute_music"),Music&&Music->VolumeMultiplier>0&&Music->IsPlaying());UpdateEffectsVolume(.8f);SaveSettings();{auto Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(ProfileSlot(),0));Check(TEXT("effects_volume_saved"),Loaded&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.8f));}SettingsReturn=EScreen::Game;ChangeScreen(EScreen::Settings);break;
  case 31:Shot(TEXT("14_Settings_Effects"));break;
@@ -374,8 +376,11 @@ void AFootballController::ApplyQuality(){
 void AFootballController::UpdateDemo(float Dt){
  auto M=GetWorld()->GetAuthGameMode<AFootballMode>();if(!M||!M->Ball)return;
  const float T=GetWorld()->GetTimeSeconds();const float X=Avatar->GetActorLocation().X;
- // Approach -> receive -> two running steps -> kick -> follow through and turn.
- if(DemoPhase==1&&X*DemoDirection>=1000.f&&Avatar->CanAct()){DemoDirection=-DemoDirection;DemoPhase=0;M->ResetBall();}
+ // Turn as soon as the kick finishes; let the released ball complete its flight.
+ if(DemoPhase==1&&!PendingShot&&Avatar->CanAct()){DemoDirection=-DemoDirection;DemoPhase=3;}
+ if(DemoPhase==3&&T-DemoShotAt>=1.25f){DemoPhase=0;M->ResetBall();}
+ // Entering the menu near midfield needs a short approach, not a completed-shot state.
+ if(DemoPhase==4&&X*DemoDirection>=300.f&&Avatar->CanAct()){DemoDirection=-DemoDirection;DemoPhase=0;M->ResetBall();}
  Avatar->GetCharacterMovement()->MaxWalkSpeed=510;
  FVector Direction(DemoDirection,0,0);Direction.Y=FMath::Clamp(-Avatar->GetActorLocation().Y*.01f,-.3f,.3f);
  if(!Avatar->IsMovementLocked())Avatar->AddMovementInput(Direction.GetSafeNormal(),1);
