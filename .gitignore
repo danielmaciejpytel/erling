@@ -111,3 +111,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 Desktop.ini
+/Tools
+AGENTS.md
