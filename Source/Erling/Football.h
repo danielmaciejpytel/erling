@@ -92,13 +92,13 @@ public:
  UPROPERTY(Config) float SlideRunDistance=520;
  UPROPERTY(Config) float SlideSprintMultiplier=1.25f;
  UPROPERTY(Config) float TripChance=.33f;
- UPROPERTY(Config) float FlipChance=.5f;
  int32 PreviewIndex=-1; void CycleAnimationPreview(int32 Direction); FText PreviewAnimationText()const;
  bool WalkHeld=false; void WalkOn(); void WalkOff();
  void RunChecks(); int32 TestStage_Latest=0; double TestAt=0; FString Report;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
  TSharedPtr<SWidget> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
- FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false;
+ FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
+ float UpdatePitchCameraLead(float Dt);
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
  FText OptionText(int32 Index) const;
  void RunProjectChecks(); int32 TestStage=0; double TestStarted=0; FString TestReport; FVector TestPosition; bool TestJumpObserved=false;

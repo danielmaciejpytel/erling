@@ -74,6 +74,8 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
 {
     if(const auto* P=Cast<AFootballPlayer>(CharacterOwner);P&&P->IsMovementLocked())
     {
+        TurnSkidRemaining=0.f;
+        LastMoveInputDirection=FVector::ZeroVector;
         if(P->Action==AFootballPlayer::EAction::Slide&&P->SlideDistance>0)
         {
             const FVector Direction=P->EntryVelocity.GetSafeNormal2D();
@@ -84,6 +86,36 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
         }
         else {Velocity.X=P->ActionVelocity.X;Velocity.Y=P->ActionVelocity.Y;}
         Acceleration=FVector::ZeroVector;
+        return;
+    }
+    if(!IsMovingOnGround())
+    {
+        TurnSkidRemaining=0.f;
+        LastMoveInputDirection=FVector::ZeroVector;
+        Super::CalcVelocity(Dt,Friction,Fluid,Braking);
+        return;
+    }
+    const FVector InputDirection=Acceleration.GetSafeNormal2D();
+    const float Speed=Velocity.Size2D();
+    if(!InputDirection.IsNearlyZero())
+    {
+        if(Speed>300.f&&!LastMoveInputDirection.IsNearlyZero())
+        {
+            const float InputChange=FVector::DotProduct(InputDirection,LastMoveInputDirection);
+            const float AgainstMomentum=FVector::DotProduct(InputDirection,Velocity.GetSafeNormal2D());
+            if(InputChange<.45f&&AgainstMomentum<.55f)
+                TurnSkidRemaining=Speed>600.f?.28f:.18f;
+        }
+        LastMoveInputDirection=InputDirection;
+    }
+    else if(Speed<60.f)LastMoveInputDirection=FVector::ZeroVector;
+
+    if(TurnSkidRemaining>0.f)TurnSkidRemaining=FMath::Max(0.f,TurnSkidRemaining-Dt);
+    if(TurnSkidRemaining>0.f&&Speed>250.f)
+    {
+        const float SprintAlpha=FMath::Clamp((Speed-510.f)/255.f,0.f,1.f);
+        const float FrictionScale=FMath::Lerp(.24f,.14f,SprintAlpha);
+        Super::CalcVelocity(Dt,Friction*FrictionScale,Fluid,Braking*.55f);
         return;
     }
     Super::CalcVelocity(Dt,Friction,Fluid,Braking);
