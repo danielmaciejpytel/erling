@@ -26,7 +26,7 @@ bool AFootballPlayer::StartAction(EAction Kind,const FString& Clip,float Rate,fl
     UAnimSequence* Sequence=Animations.FindRef(Clip);
     if(!Sequence)return false;
     TurningInPlace=false;
-    EntryVelocity=GetVelocity();EntryVelocity.Z=0;
+    EntryVelocity=GetVelocity();EntryVelocity.Z=0;ActionStartLocation=GetActorLocation();
     SetAnimation(Clip,false);PlaybackRate=Rate;AnimationTime=Sequence->GetPlayLength()*StartFraction;
     ActionStartTime=AnimationTime;ActionDuration=(Sequence->GetPlayLength()-AnimationTime)/Rate;
     ActionElapsed=0;Action=Kind;ActionInterruptible=Interruptible;PhysicalJump=false;
@@ -36,8 +36,10 @@ bool AFootballPlayer::StartAction(EAction Kind,const FString& Clip,float Rate,fl
 }
 void AFootballPlayer::ClearAction()
 {
+    const bool WasSlide=Action==EAction::Slide;
     TurningInPlace=false;
     Action=EAction::None;ActionElapsed=0;ActionVelocity=FVector::ZeroVector;ActionInterruptible=false;
+    if(WasSlide){auto& Velocity=GetCharacterMovement()->Velocity;Velocity.X=0;Velocity.Y=0;}
     GetCharacterMovement()->bOrientRotationToMovement=true;KickUntil=0;PlaybackRate=1;
 }
 void AFootballPlayer::UpdateAction(float Dt)
