@@ -40,7 +40,7 @@ public:
  bool TurningInPlace=false; float TurnElapsed=0,TurnStartYaw=0,TurnTargetYaw=0;
  void BeginTurn(float TargetYaw);
  float ActionElapsed=0,ActionStartTime=0,ActionDuration=0,SlideDistance=0,IdleElapsed=0,JumpElapsed=0;
- FVector ActionVelocity=FVector::ZeroVector,EntryVelocity=FVector::ZeroVector;
+ FVector ActionVelocity=FVector::ZeroVector,EntryVelocity=FVector::ZeroVector,ActionStartLocation=FVector::ZeroVector;
  bool IsMovementLocked()const{return Action!=EAction::None;}
  bool CanAct()const;
  bool StartAction(EAction Kind,const FString& Clip,float Rate=1.f,float StartFraction=0.f,bool Interruptible=false);

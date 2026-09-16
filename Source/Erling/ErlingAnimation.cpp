@@ -74,7 +74,15 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
 {
     if(const auto* P=Cast<AFootballPlayer>(CharacterOwner);P&&P->IsMovementLocked())
     {
-        Velocity.X=P->ActionVelocity.X;Velocity.Y=P->ActionVelocity.Y;
+        if(P->Action==AFootballPlayer::EAction::Slide&&P->SlideDistance>0)
+        {
+            const FVector Direction=P->EntryVelocity.GetSafeNormal2D();
+            const float Travel=FMath::Max(0.f,FVector::DotProduct(CharacterOwner->GetActorLocation()-P->ActionStartLocation,Direction));
+            const float Remaining=FMath::Max(0.f,P->SlideDistance-Travel);
+            const float Speed=FMath::Min(P->ActionVelocity.Size2D(),Remaining/FMath::Max(Dt,SMALL_NUMBER));
+            Velocity.X=Direction.X*Speed;Velocity.Y=Direction.Y*Speed;
+        }
+        else {Velocity.X=P->ActionVelocity.X;Velocity.Y=P->ActionVelocity.Y;}
         Acceleration=FVector::ZeroVector;
         return;
     }

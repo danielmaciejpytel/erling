@@ -100,7 +100,7 @@ void AFootballController::RunChecks()
         Check(TEXT("slide_twice_as_fast"),Avatar->ActionDuration<.76f);Wait=.6f;break;
     case 7:Screenshot(TEXT("05_Slide"));Wait=1.2f;break;
     case 8:
-        Check(TEXT("run_slide_distance"),FMath::Abs(FVector::Dist2D(TestPosition,Avatar->GetActorLocation())-520)<25);
+        {const float Travel=FVector::Dist2D(TestPosition,Avatar->GetActorLocation());UE_LOG(LogTemp,Display,TEXT("RUN_SLIDE_TRAVEL distance=%f expected=520"),Travel);Check(TEXT("run_slide_distance"),FMath::Abs(Travel-520)<25);}
         ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(765,0,0);Sprint=true;TestPosition=Avatar->GetActorLocation();SlidePressed();
         Check(TEXT("sprint_slide_distance_selected"),Avatar->SlideDistance==650);Wait=1.8f;break;
     case 9:
