@@ -225,13 +225,13 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  Ball->SetLinearDamping(BallControl?.42f:.3f);Ball->SetPhysicsLinearVelocity(V);Ball->SetPhysicsAngularVelocityInRadians(FVector(-V.Y/22,V.X/22,0));
 }
 void AFootballMode::Tick(float Dt){Super::Tick(Dt);if(!Ball)return;auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController());if(!PC)return;const bool GameplayActive=PC->Screen==AFootballController::EScreen::Game||(PC->Screen==AFootballController::EScreen::Settings&&PC->SettingsReturn==AFootballController::EScreen::Game&&!PC->IsPaused());if(!GameplayActive)return;
- Dribble(PC->Avatar,Dt);auto P=Ball->GetComponentLocation();const FVector OldBall=PreviousBall;PreviousBall=P;float T=GetWorld()->GetTimeSeconds();if(ResetAt>0&&T>=ResetAt){ResetBall();return;}float CrossingY=P.Y,CrossingZ=P.Z;const float Plane=P.X>=0?2762.f:-2762.f;const bool Crossed=FMath::Abs(P.X)>2762&&FMath::Abs(OldBall.X)<=2762;if(Crossed&&!FMath::IsNearlyEqual(P.X,OldBall.X)){const FVector Crossing=FMath::Lerp(OldBall,P,(Plane-OldBall.X)/(P.X-OldBall.X));CrossingY=Crossing.Y;CrossingZ=Crossing.Z;}if(!Scored&&Crossed&&FMath::Abs(CrossingY)<320&&CrossingZ<238&&CrossingZ>0){Goals++;PC->OnGoal(LastShooter.Get());PC->PlayEffect(TEXT("goal"),1.5f);Scored=true;ResetAt=T+1.5f;PC->Toast=TEXT("GOAL!  +1");PC->ToastUntil=T+2;}
+ Dribble(PC->Avatar,Dt);auto P=Ball->GetComponentLocation();const FVector OldBall=PreviousBall;PreviousBall=P;float T=GetWorld()->GetTimeSeconds();if(ResetAt>0&&T>=ResetAt){ResetBall();return;}float CrossingY=P.Y,CrossingZ=P.Z;const float Plane=P.X>=0?2762.f:-2762.f;const bool Crossed=FMath::Abs(P.X)>2762&&FMath::Abs(OldBall.X)<=2762;if(Crossed&&!FMath::IsNearlyEqual(P.X,OldBall.X)){const FVector Crossing=FMath::Lerp(OldBall,P,(Plane-OldBall.X)/(P.X-OldBall.X));CrossingY=Crossing.Y;CrossingZ=Crossing.Z;}if(!Scored&&Crossed&&FMath::Abs(CrossingY)<320&&CrossingZ<238&&CrossingZ>0){Goals++;PC->OnGoal(LastShooter.Get());PC->PlayEffect(TEXT("goal"),1.5f);Scored=true;ResetAt=T+1.5f;PC->Toast=PC->Localize(TEXT("GOAL!  +1"),TEXT("GOL!  +1"));PC->ToastUntil=T+2;}
  if(!Scored&&ShotInFlight&&!BallHidden&&((FMath::Abs(P.X)>2762)||(FMath::Abs(P.X)>2720&&(FMath::Abs(P.Y)>320||P.Z>238))||FMath::Abs(P.Y)>1750))HideMiss();if(P.Z<-200)ResetBall();}
 
 AFootballController::AFootballController(){PrimaryActorTick.bCanEverTick=true;PrimaryActorTick.bTickEvenWhenPaused=true;bAutoManageActiveCameraTarget=false;}
 void AFootballController::LoadCatalog(){FString S; if(!FFileHelper::LoadFileToString(S,*(FPaths::ProjectContentDir()/TEXT("Data/wardrobe.json"))))return;TSharedPtr<FJsonObject> Root;auto Reader=TJsonReaderFactory<>::Create(S);if(!FJsonSerializer::Deserialize(Reader,Root)||!Root)return;
  for(auto CV:Root->GetArrayField(TEXT("categories"))){auto CO=CV->AsObject();FKitCategory C;C.Label=CO->GetStringField(TEXT("label"));for(auto OV:CO->GetArrayField(TEXT("options"))){auto OO=OV->AsObject();FKitOption O;O.Label=OO->GetStringField(TEXT("label"));OO->TryGetStringField(TEXT("texture"),O.Texture);const TArray<TSharedPtr<FJsonValue>>* Arr;if(OO->TryGetArrayField(TEXT("meshes"),Arr))for(auto V:*Arr)O.Meshes.Add(V->AsString());C.Options.Add(O);}Catalog.Add(C);}}
-void AFootballController::BeginPlay(){Super::BeginPlay();Avatar=Cast<AFootballPlayer>(GetPawn());if(!Avatar){Avatar=GetWorld()->SpawnActor<AFootballPlayer>(FVector(-350,0,100),FRotator::ZeroRotator);Possess(Avatar);}AudioController=this;for(auto N:{TEXT("goal"),TEXT("jump"),TEXT("kick"),TEXT("fail"),TEXT("click")})Effects.Add(N,LoadObject<USoundBase>(nullptr,*FString::Printf(TEXT("/Game/Erling/Audio/%s.%s"),N,N)));Avatar->InitializeAssets();Avatar->SetActorLocation(FVector(-350,0,100));LoadCatalog();Saved=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(ProfileSlot(),0));if(!Saved)Saved=Cast<UFootballSave>(UGameplayStatics::CreateSaveGameObject(UFootballSave::StaticClass()));if(Saved->CameraMode<0||Saved->CameraMode>2)Saved->CameraMode=Saved->ReducedMotion?1:0;Saved->ReducedMotion=Saved->CameraMode==1;Selection=Saved->Appearance;
+void AFootballController::BeginPlay(){Super::BeginPlay();Avatar=Cast<AFootballPlayer>(GetPawn());if(!Avatar){Avatar=GetWorld()->SpawnActor<AFootballPlayer>(FVector(-350,0,100),FRotator::ZeroRotator);Possess(Avatar);}AudioController=this;for(auto N:{TEXT("goal"),TEXT("jump"),TEXT("kick"),TEXT("fail"),TEXT("click")})Effects.Add(N,LoadObject<USoundBase>(nullptr,*FString::Printf(TEXT("/Game/Erling/Audio/%s.%s"),N,N)));Avatar->InitializeAssets();Avatar->SetActorLocation(FVector(-350,0,100));LoadCatalog();Saved=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(ProfileSlot(),0));if(!Saved)Saved=Cast<UFootballSave>(UGameplayStatics::CreateSaveGameObject(UFootballSave::StaticClass()));Saved->Language=FMath::Clamp(Saved->Language,0,1);if(Saved->CameraMode<0||Saved->CameraMode>2)Saved->CameraMode=Saved->ReducedMotion?1:0;Saved->ReducedMotion=Saved->CameraMode==1;Selection=Saved->Appearance;
  if(!Catalog.IsEmpty()){Selection.SetNum(Catalog.Num());for(int I=0;I<Catalog.Num();I++)Selection[I]=FMath::Clamp(Selection[I],0,FMath::Max(0,Catalog[I].Options.Num()-1));}else UE_LOG(LogTemp,Error,TEXT("Wardrobe catalog is empty; keeping the saved appearance unchanged"));Avatar->ApplyKit(Selection,Catalog);ViewCamera=GetWorld()->SpawnActor<ACameraActor>();ViewCamera->GetCameraComponent()->FieldOfView=48;SetViewTarget(ViewCamera);ChangeScreen(EScreen::Main);
  Music=NewObject<UAudioComponent>(this);Music->bIsUISound=true;Music->bAllowSpatialization=false;Music->bAutoActivate=false;Music->bAutoDestroy=false;Music->RegisterComponent();
  if(auto Track=LoadObject<USoundWave>(nullptr,TEXT("/Game/Erling/Audio/background.background"))){Track->bLooping=true;Music->SetSound(Track);Music->SetVolumeMultiplier(Saved->Volume);Music->Play();}ApplyQuality();}
@@ -293,13 +293,23 @@ void AFootballController::PauseToggle(){if(Screen==EScreen::Game)ChangeScreen(ES
 void AFootballController::ChangeScreen(EScreen Next){const auto Old=Screen;const bool ResumeFromSettings=Old==EScreen::Settings&&Next==SettingsReturn;BallControlOff();if(Avatar){Avatar->PreviewAnimation=false;PreviewIndex=-1;}Screen=Next;Charging=false;GoalSpacePending=false;SpaceHeld=false;if((Next==EScreen::Editor||Next==EScreen::Main)&&!ResumeFromSettings){CancelPendingActions();if(Avatar){Avatar->ClearAction();Avatar->PhysicalJump=false;}GoalCelebrationUsed=true;}const bool PauseForSettings=Next==EScreen::Settings&&(SettingsReturn==EScreen::Pause||(Saved&&Saved->PauseInSettings));SetPause(Next==EScreen::Pause||PauseForSettings);SprintOff();
  if(Next==EScreen::Editor){EditorZoom=0;Dragging=false;DraftBefore=Selection;Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator(0,-35,0));Avatar->KickUntil=0;Avatar->SetAnimation(TEXT("Idle_Breathe"));Reset();}
  if(Next==EScreen::Game&&Old!=EScreen::Pause&&!ResumeFromSettings){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;PitchCameraLeadX=0;Reset();}
- if(Next==EScreen::Main&&Old!=EScreen::Credits&&!ResumeFromSettings){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?4:0;DemoDirection=DemoPhase==4?(X>=0?1:-1):(X>0?-1:1);Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
+ if(Next==EScreen::Main&&Old!=EScreen::Credits&&!ResumeFromSettings){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?4:0;DemoDirection=DemoPhase==4?(X>=0?1:-1):(X>0?-1:1);DemoShotTargetX=0.f;Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
 void AFootballController::Cycle(int32 C,int32 Direction){if(!Catalog.IsValidIndex(C)||Catalog[C].Options.IsEmpty())return;Selection[C]=(Selection[C]+Direction+Catalog[C].Options.Num())%Catalog[C].Options.Num();Avatar->ApplyKit(Selection,Catalog);Toast.Empty();}
-void AFootballController::SaveAppearance(){Saved->Appearance=Selection;const bool Ok=UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);if(Ok)DraftBefore=Selection;Toast=Ok?TEXT("Appearance saved"):TEXT("Failed to save appearance");ToastUntil=GetWorld()->GetTimeSeconds()+4;}
+void AFootballController::SaveAppearance(){Saved->Appearance=Selection;const bool Ok=UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);if(Ok)DraftBefore=Selection;Toast=Ok?Localize(TEXT("Appearance saved"),TEXT("Wygląd zapisany")):Localize(TEXT("Failed to save appearance"),TEXT("Nie udało się zapisać wyglądu"));ToastUntil=GetWorld()->GetTimeSeconds()+4;}
 void AFootballController::BackFromEditor(){Selection=DraftBefore;Avatar->ApplyKit(Selection,Catalog);ChangeScreen(EScreen::Main);}
 void AFootballController::SaveSettings(){UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);}
 void AFootballController::Quit(){UKismetSystemLibrary::QuitGame(this,this,EQuitPreference::Quit,false);}
-FText AFootballController::OptionText(int32 I)const{if(Catalog.IsValidIndex(I)&&Selection.IsValidIndex(I)&&Catalog[I].Options.IsValidIndex(Selection[I]))return FText::FromString(Catalog[I].Options[Selection[I]].Label);return FText::FromString(TEXT("No items"));}
+FString AFootballController::Localize(const TCHAR* English,const TCHAR* Polish)const{return Saved&&Saved->Language==1?FString(Polish):FString(English);}
+FString AFootballController::LocalizeCatalogLabel(const FString& Value)const{
+ if(!Saved||Saved->Language!=1)return Value;
+ static const TMap<FString,FString> Pl={
+  {TEXT("Hairstyle"),TEXT("Fryzura")},{TEXT("Face"),TEXT("Twarz")},{TEXT("Top"),TEXT("Góra")},{TEXT("Bottom"),TEXT("Dół")},{TEXT("Footwear"),TEXT("Obuwie")},
+  {TEXT("Bald"),TEXT("Łysy")},{TEXT("Ponytail"),TEXT("Kucyk")},{TEXT("Smile"),TEXT("Uśmiech")},{TEXT("Joy"),TEXT("Radość")},{TEXT("Anger"),TEXT("Złość")},{TEXT("Surprise"),TEXT("Zaskoczenie")},{TEXT("Sleepy"),TEXT("Senny")},{TEXT("Tired"),TEXT("Zmęczony")},
+  {TEXT("Shirtless"),TEXT("Bez koszulki")},{TEXT("Norway"),TEXT("Norwegia")},{TEXT("Underwear"),TEXT("Bielizna")},{TEXT("White Shorts"),TEXT("Białe spodenki")},{TEXT("Barefoot"),TEXT("Boso")},{TEXT("Football Boots"),TEXT("Korki")}
+ };
+ if(const FString* Found=Pl.Find(Value))return *Found;return Value;
+}
+FText AFootballController::OptionText(int32 I)const{if(Catalog.IsValidIndex(I)&&Selection.IsValidIndex(I)&&Catalog[I].Options.IsValidIndex(Selection[I]))return FText::FromString(LocalizeCatalogLabel(Catalog[I].Options[Selection[I]].Label));return FText::FromString(Localize(TEXT("No items"),TEXT("Brak opcji")));}
 void AFootballController::Tick(float Dt){Super::Tick(Dt);UpdateActions(Dt);if(BallControlHeld){auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(!Mode||!Mode->HasDribbleControl(Avatar))BallControlOff();}if(FParse::Param(FCommandLine::Get(),TEXT("ErlingTest_Latest")))RunChecks();if(!Avatar||!ViewCamera)return;if(Screen==EScreen::Settings&&IsPaused())return;const EScreen ActiveScreen=Screen==EScreen::Settings?SettingsReturn:Screen;UpdateEditorInput(Dt);if(Avatar->GetActorLocation().Z < -250){Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Reset();}if(FParse::Param(FCommandLine::Get(),TEXT("ErlingTest")))RunProjectChecks();auto P=Avatar->GetActorLocation();
  if(ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits)UpdateDemo(Dt);
  FVector Cam,Target;float Fov=48;
@@ -326,10 +336,11 @@ void AFootballController::BuildUI(){if(!GEngine||!GEngine->GameViewport)return;i
  TSharedRef<SOverlay> Root=SNew(SOverlay);TSharedRef<SVerticalBox> Content=SNew(SVerticalBox);
  auto Add=[&Content](TSharedRef<SWidget> W,float Bottom=10.f){Content->AddSlot().AutoHeight().Padding(0,0,0,Bottom)[W];};
  auto Settings=[this](){SettingsReturn=Screen;ChangeScreen(EScreen::Settings);};
+ auto L=[this](const TCHAR* En,const TCHAR* Pl){return Localize(En,Pl);};
  auto AccentRule=[](){return SNew(SHorizontalBox)+SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(46).HeightOverride(3)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Pink)]];};
  auto SectionTitle=[&](const FString& Title,const FString& Subtitle){Add(BoldText(Title,38));Add(AccentRule(),12);if(!Subtitle.IsEmpty())Add(Text(Subtitle,17,Muted),22);};
  auto EditorRow=[this](int32 I)->TSharedRef<SWidget>{
-  FString Category=Catalog[I].Label;
+  FString Category=LocalizeCatalogLabel(Catalog[I].Label);
   return SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(PanelSoft).Padding(FMargin(14,9))
    [SNew(SHorizontalBox)
     +SHorizontalBox::Slot().FillWidth(.34f).VAlign(VAlign_Center)[Text(Category,16,Muted)]
@@ -338,38 +349,39 @@ void AFootballController::BuildUI(){if(!GEngine||!GEngine->GameViewport)return;i
     +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SButton).ContentPadding(FMargin(12,7)).ButtonColorAndOpacity(PinkSoft).OnClicked_Lambda([this,I](){ClickSound();Cycle(I,1);return FReply::Handled();})[BoldText(TEXT("›"),23,Pink)]]];
  };
  if(Screen==EScreen::Main){
-  Add(BoldText(TEXT("ERLING"),50));Add(BoldText(TEXT("F E E L   T H E   G A M E"),15,Pink),10);Add(AccentRule(),14);Add(Text(TEXT("Your player. Your pitch."),18,Muted),26);
-  Add(Button(TEXT("Play"),[this](){ChangeScreen(EScreen::Game);},true,TEXT("▶")),10);
-  Add(Button(TEXT("Character Creator"),[this](){ChangeScreen(EScreen::Editor);},false,TEXT("●")),10);
-  Add(Button(TEXT("Settings"),Settings,false,TEXT("O")),10);
-  Add(Button(TEXT("Credits"),[this](){ChangeScreen(EScreen::Credits);},false,TEXT("••")),10);
-  Add(Button(TEXT("Quit"),[this](){Quit();},false,TEXT("□")),0);
+  Add(BoldText(TEXT("ERLING"),50));Add(BoldText(L(TEXT("F E E L   T H E   G A M E"),TEXT("P O C Z U J   G R Ę")),15,Pink),10);Add(AccentRule(),14);Add(Text(L(TEXT("Your player. Your pitch."),TEXT("Twój zawodnik. Twoje boisko.")),18,Muted),26);
+  Add(Button(L(TEXT("Play"),TEXT("Graj")),[this](){ChangeScreen(EScreen::Game);},true,TEXT("▶")),10);
+  Add(Button(L(TEXT("Character Creator"),TEXT("Edytor postaci")),[this](){ChangeScreen(EScreen::Editor);},false,TEXT("●")),10);
+  Add(Button(L(TEXT("Settings"),TEXT("Ustawienia")),Settings,false,TEXT("O")),10);
+  Add(Button(L(TEXT("Credits"),TEXT("Twórcy")),[this](){ChangeScreen(EScreen::Credits);},false,TEXT("••")),10);
+  Add(Button(L(TEXT("Quit"),TEXT("Wyjdź")),[this](){Quit();},false,TEXT("□")),0);
  }
  else if(Screen==EScreen::Editor){
-  SectionTitle(TEXT("YOUR PLAYER"),TEXT("Create your player. Your pitch. Your rules."));
+  SectionTitle(L(TEXT("YOUR PLAYER"),TEXT("TWÓJ ZAWODNIK")),L(TEXT("Create your player. Your pitch. Your rules."),TEXT("Stwórz swojego zawodnika. Twoje boisko. Twoje zasady.")));
   for(int32 I=0;I<Catalog.Num();I++)Add(EditorRow(I),10);
   Add(SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(PanelSoft).Padding(FMargin(14,9))
    [SNew(SHorizontalBox)
-    +SHorizontalBox::Slot().FillWidth(.34f).VAlign(VAlign_Center)[Text(TEXT("Animation"),16,Muted)]
+    +SHorizontalBox::Slot().FillWidth(.34f).VAlign(VAlign_Center)[Text(L(TEXT("Animation"),TEXT("Animacja")),16,Muted)]
     +SHorizontalBox::Slot().AutoWidth()[SNew(SButton).ContentPadding(FMargin(12,7)).ButtonColorAndOpacity(Panel).OnClicked_Lambda([this](){ClickSound();CycleAnimationPreview(-1);return FReply::Handled();})[BoldText(TEXT("‹"),23,Muted)]]
     +SHorizontalBox::Slot().FillWidth(.45f).VAlign(VAlign_Center).HAlign(HAlign_Center).Padding(10,0)[SNew(STextBlock).Text_Lambda([this](){return PreviewAnimationText();}).Font(FCoreStyle::GetDefaultFontStyle("Regular",14)).ColorAndOpacity(White)]
     +SHorizontalBox::Slot().AutoWidth()[SNew(SButton).ContentPadding(FMargin(12,7)).ButtonColorAndOpacity(PinkSoft).OnClicked_Lambda([this](){ClickSound();CycleAnimationPreview(1);return FReply::Handled();})[BoldText(TEXT("›"),23,Pink)]]],0);
-  Root->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(54,0,0,42))[SNew(SBox).WidthOverride(250)[Button(TEXT("Back"),[this](){BackFromEditor();},false,TEXT("←"))]];
-  Root->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(FMargin(0,0,54,42))[SNew(SBox).WidthOverride(310)[Button(TEXT("Save Appearance"),[this](){SaveAppearance();},true,TEXT("✓"))]];
+  Root->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(54,0,0,42))[SNew(SBox).WidthOverride(250)[Button(L(TEXT("Back"),TEXT("Wstecz")),[this](){BackFromEditor();},false,TEXT("←"))]];
+  Root->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(FMargin(0,0,54,42))[SNew(SBox).WidthOverride(310)[Button(L(TEXT("Save Appearance"),TEXT("Zapisz wygląd")),[this](){SaveAppearance();},true,TEXT("✓"))]];
  }
- else if(Screen==EScreen::Pause){SectionTitle(TEXT("PAUSED"),TEXT("The match is waiting for your return."));Add(Button(TEXT("Resume"),[this](){ChangeScreen(EScreen::Game);},true,TEXT("▶")));Add(Button(TEXT("Settings"),Settings,false,TEXT("O")));Add(Button(TEXT("Main Menu"),[this](){ChangeScreen(EScreen::Main);},false,TEXT("←")));Add(Button(TEXT("Quit Game"),[this](){Quit();},false,TEXT("□")));}
- else if(Screen==EScreen::Credits){SectionTitle(TEXT("CREDITS"),TEXT("Project created by"));Add(BoldText(TEXT("Daniel Maciej Pytel"),22,Pink));Add(Text(TEXT("2026"),16,Muted),18);
+ else if(Screen==EScreen::Pause){SectionTitle(L(TEXT("PAUSED"),TEXT("PAUZA")),L(TEXT("The match is waiting for your return."),TEXT("Mecz czeka na Twój powrót.")));Add(Button(L(TEXT("Resume"),TEXT("Wznów")),[this](){ChangeScreen(EScreen::Game);},true,TEXT("▶")));Add(Button(L(TEXT("Settings"),TEXT("Ustawienia")),Settings,false,TEXT("O")));Add(Button(L(TEXT("Main Menu"),TEXT("Menu główne")),[this](){ChangeScreen(EScreen::Main);},false,TEXT("←")));Add(Button(L(TEXT("Quit Game"),TEXT("Wyjdź z gry")),[this](){Quit();},false,TEXT("□")));}
+ else if(Screen==EScreen::Credits){SectionTitle(L(TEXT("CREDITS"),TEXT("TWÓRCY")),L(TEXT("Project created by"),TEXT("Projekt stworzony przez")));Add(BoldText(TEXT("Daniel Maciej Pytel"),22,Pink));Add(Text(TEXT("2026"),16,Muted),18);
   auto Link=[](const TCHAR* Label,const TCHAR* Url){return SNew(SBox).MinDesiredHeight(52)[SNew(SButton).ContentPadding(FMargin(14,9)).ButtonColorAndOpacity(PanelSoft).OnClicked_Lambda([Url](){ClickSound();FPlatformProcess::LaunchURL(Url,nullptr,nullptr);return FReply::Handled();})[BoldText(Label,13,White)]];};
-  Add(SNew(SHorizontalBox)+SHorizontalBox::Slot().FillWidth(1).Padding(0,0,8,0)[Link(TEXT("ArtStation"),TEXT("https://www.artstation.com/danielmaciejpytel"))]+SHorizontalBox::Slot().FillWidth(1).Padding(0,0,8,0)[Link(TEXT("GitHub"),TEXT("https://github.com/danielmaciejpytel"))]+SHorizontalBox::Slot().FillWidth(1)[Link(TEXT("LinkedIn"),TEXT("https://www.linkedin.com/in/danielmaciejpytel/"))]);Add(Button(TEXT("Back"),[this](){ChangeScreen(EScreen::Main);},false,TEXT("←")));}
- else if(Screen==EScreen::Settings){SectionTitle(TEXT("SETTINGS"),TEXT("Make the game yours."));
-  Add(Text(TEXT("Music Volume"),16,Muted),5);Add(SNew(SSlider).Value(Saved->Volume).OnValueChanged_Lambda([this](float V){UpdateMusicVolume(V);}),14);
-  Add(Text(TEXT("Effects Volume"),16,Muted),5);Add(SNew(SSlider).Value(Saved->EffectsVolume).OnValueChanged_Lambda([this](float V){UpdateEffectsVolume(V);}),14);
-  Add(Text(TEXT("Mouse Sensitivity"),16,Muted),5);Add(SNew(SSlider).Value((Saved->Sensitivity-.3f)/2.7f).OnValueChanged_Lambda([this](float V){Saved->Sensitivity=.3f+V*2.7f;}),16);
-  const TCHAR* CameraLabel=Saved->CameraMode==1?TEXT("Reduced"):Saved->CameraMode==2?TEXT("Pitch"):TEXT("Smooth");
- Add(Button(FString::Printf(TEXT("Camera Movement: %s"),CameraLabel),[this](){Saved->CameraMode=(Saved->CameraMode+1)%3;Saved->ReducedMotion=Saved->CameraMode==1;CameraPivotInitialized=false;PitchCameraLeadX=0;BuildUI();},false,TEXT("◉")));
- Add(Button(FString::Printf(TEXT("Graphics Quality: %d / 4"),Saved->Quality+1),[this](){Saved->Quality=(Saved->Quality+1)%4;ApplyQuality();BuildUI();},false,TEXT("▣")));
- Add(Button(FString::Printf(TEXT("Pause in settings: %s"),Saved->PauseInSettings?TEXT("On"):TEXT("Off")),[this](){Saved->PauseInSettings=!Saved->PauseInSettings;const bool ShouldPause=SettingsReturn==EScreen::Pause||Saved->PauseInSettings;SetPause(ShouldPause);BuildUI();},false,TEXT("Ⅱ")));
- Add(Button(TEXT("Save and Back"),[this](){SaveSettings();ChangeScreen(SettingsReturn);},true,TEXT("✓")),0);
+  Add(SNew(SHorizontalBox)+SHorizontalBox::Slot().FillWidth(1).Padding(0,0,8,0)[Link(TEXT("ArtStation"),TEXT("https://www.artstation.com/danielmaciejpytel"))]+SHorizontalBox::Slot().FillWidth(1).Padding(0,0,8,0)[Link(TEXT("GitHub"),TEXT("https://github.com/danielmaciejpytel"))]+SHorizontalBox::Slot().FillWidth(1)[Link(TEXT("LinkedIn"),TEXT("https://www.linkedin.com/in/danielmaciejpytel/"))]);Add(Button(L(TEXT("Back"),TEXT("Wstecz")),[this](){ChangeScreen(EScreen::Main);},false,TEXT("←")));}
+ else if(Screen==EScreen::Settings){SectionTitle(L(TEXT("SETTINGS"),TEXT("USTAWIENIA")),L(TEXT("Make the game yours."),TEXT("Dopasuj grę do siebie.")));
+  Add(Button(FString::Printf(TEXT("%s: %s"),*L(TEXT("Language"),TEXT("Język")),Saved->Language==1?TEXT("Polski"):TEXT("English")),[this](){Saved->Language=Saved->Language==1?0:1;UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);BuildUI();},false,TEXT("文")),12);
+  Add(Text(L(TEXT("Music Volume"),TEXT("Głośność muzyki")),16,Muted),5);Add(SNew(SSlider).Value(Saved->Volume).OnValueChanged_Lambda([this](float V){UpdateMusicVolume(V);}),14);
+  Add(Text(L(TEXT("Effects Volume"),TEXT("Głośność efektów")),16,Muted),5);Add(SNew(SSlider).Value(Saved->EffectsVolume).OnValueChanged_Lambda([this](float V){UpdateEffectsVolume(V);}),14);
+  Add(Text(L(TEXT("Mouse Sensitivity"),TEXT("Czułość myszy")),16,Muted),5);Add(SNew(SSlider).Value((Saved->Sensitivity-.3f)/2.7f).OnValueChanged_Lambda([this](float V){Saved->Sensitivity=.3f+V*2.7f;}),16);
+  const FString CameraLabel=Saved->CameraMode==1?L(TEXT("Reduced"),TEXT("Ograniczony")):Saved->CameraMode==2?L(TEXT("Pitch"),TEXT("Boiskowy")):L(TEXT("Smooth"),TEXT("Płynny"));
+ Add(Button(FString::Printf(TEXT("%s: %s"),*L(TEXT("Camera Movement"),TEXT("Ruch kamery")),*CameraLabel),[this](){Saved->CameraMode=(Saved->CameraMode+1)%3;Saved->ReducedMotion=Saved->CameraMode==1;CameraPivotInitialized=false;PitchCameraLeadX=0;BuildUI();},false,TEXT("◉")));
+ Add(Button(FString::Printf(TEXT("%s: %d / 4"),*L(TEXT("Graphics Quality"),TEXT("Jakość grafiki")),Saved->Quality+1),[this](){Saved->Quality=(Saved->Quality+1)%4;ApplyQuality();BuildUI();},false,TEXT("▣")));
+ Add(Button(FString::Printf(TEXT("%s: %s"),*L(TEXT("Pause in settings"),TEXT("Pauza w ustawieniach")),Saved->PauseInSettings?*L(TEXT("On"),TEXT("Wł.")):*L(TEXT("Off"),TEXT("Wył."))),[this](){Saved->PauseInSettings=!Saved->PauseInSettings;const bool ShouldPause=SettingsReturn==EScreen::Pause||Saved->PauseInSettings;SetPause(ShouldPause);BuildUI();},false,TEXT("Ⅱ")));
+ Add(Button(L(TEXT("Save and Back"),TEXT("Zapisz i wróć")),[this](){SaveSettings();ChangeScreen(SettingsReturn);},true,TEXT("✓")),0);
  }
  if(Screen!=EScreen::Game){
   const float Width=Screen==EScreen::Editor?650.f:520.f;
@@ -377,19 +389,19 @@ void AFootballController::BuildUI(){if(!GEngine||!GEngine->GameViewport)return;i
  }
  else{
   Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(FMargin(0,28,0,0))[SNew(SBox).WidthOverride(300).MinDesiredHeight(72)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Ink).Padding(FMargin(22,12))[SNew(SHorizontalBox)
-   +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).HAlign(HAlign_Right).Padding(0,0,16,0)[BoldText(TEXT("GOALS"),24,White)]
+   +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).HAlign(HAlign_Right).Padding(0,0,16,0)[BoldText(L(TEXT("GOALS"),TEXT("GOLE")),24,White)]
    +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text_Lambda([this](){auto M=GetWorld()->GetAuthGameMode<AFootballMode>();return FText::FromString(FString::Printf(TEXT("%02d"),M?M->Goals:0));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",30)).ColorAndOpacity(Pink)]]]];
   Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(FMargin(18,0,18,24))[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FLinearColor(.015f,.05f,.045f,.72f)).Padding(FMargin(18,10))[SNew(SHorizontalBox)
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("WASD"),TEXT("MOVE"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("CTRL"),TEXT("BALL CONTROL"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("SHIFT"),TEXT("SPRINT"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("SPACE"),TEXT("JUMP"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("LMB"),TEXT("HOLD / RELEASE SHOT"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("RMB"),TEXT("SLIDE"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("R"),TEXT("RESET BALL"))]
-   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("ESC"),TEXT("PAUSE"))]]];
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("WASD"),L(TEXT("MOVE"),TEXT("RUCH")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("CTRL"),L(TEXT("BALL CONTROL"),TEXT("KONTROLA PIŁKI")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("SHIFT"),L(TEXT("SPRINT"),TEXT("SPRINT")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("SPACE"),L(TEXT("JUMP"),TEXT("SKOK")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("LMB"),L(TEXT("HOLD / RELEASE SHOT"),TEXT("PRZYTRZYMAJ / PUŚĆ STRZAŁ")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("RMB"),L(TEXT("SLIDE"),TEXT("WŚLIZG")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("R"),L(TEXT("RESET BALL"),TEXT("RESET PIŁKI")))]
+   +SHorizontalBox::Slot().AutoWidth()[KeyCap(TEXT("ESC"),L(TEXT("PAUSE"),TEXT("PAUZA")))]]];
  }
- Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0,112,0,0)[SNew(STextBlock).Text_Lambda([this](){if(Screen==EScreen::Game&&Charging){float C=FMath::Min(1.5f,GetWorld()->GetTimeSeconds()-ChargeStarted);return FText::FromString(FString::Printf(TEXT("SHOT  %.1f s  ·  %s"),C,C>=1.35f?TEXT("OVER THE BAR!"):C>=.85f&&C<=1.02f?TEXT("UNDER THE BAR"):C>=.35f?TEXT("POWER SHOT"):TEXT("PASS")));}if(Screen==EScreen::Game&&!GoalCelebrationUsed&&GetWorld()->GetTimeSeconds()<GoalUntil)return FText::FromString(FString::Printf(TEXT("SPACE: hop  |  hold 1 s: celebrate  ·  %.0f s"),FMath::CeilToFloat(GoalUntil-GetWorld()->GetTimeSeconds())));return FText::FromString(GetWorld()->GetTimeSeconds()<ToastUntil?Toast:TEXT(""));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",21)).ColorAndOpacity(Pink)];
+ Root->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0,112,0,0)[SNew(STextBlock).Text_Lambda([this](){if(Screen==EScreen::Game&&Charging){float C=FMath::Min(1.5f,GetWorld()->GetTimeSeconds()-ChargeStarted);const FString State=C>=1.35f?Localize(TEXT("OVER THE BAR!"),TEXT("ZA WYSOKO!")):C>=.85f&&C<=1.02f?Localize(TEXT("UNDER THE BAR"),TEXT("POD POPRZECZKĘ")):C>=.35f?Localize(TEXT("POWER SHOT"),TEXT("MOCNY STRZAŁ")):Localize(TEXT("PASS"),TEXT("PODANIE"));return FText::FromString(FString::Printf(TEXT("%s  %.1f s  ·  %s"),*Localize(TEXT("SHOT"),TEXT("STRZAŁ")),C,*State));}if(Screen==EScreen::Game&&!GoalCelebrationUsed&&GetWorld()->GetTimeSeconds()<GoalUntil)return FText::FromString(FString::Printf(TEXT("%s  ·  %.0f s"),*Localize(TEXT("SPACE: hop  |  hold 1 s: celebrate"),TEXT("SPACJA: skok  |  przytrzymaj 1 s: cieszynka")),FMath::CeilToFloat(GoalUntil-GetWorld()->GetTimeSeconds())));return FText::FromString(GetWorld()->GetTimeSeconds()<ToastUntil?Toast:TEXT(""));}).Font(FCoreStyle::GetDefaultFontStyle("Bold",21)).ColorAndOpacity(Pink)];
  UI=Root;GEngine->GameViewport->AddViewportWidgetContent(UI.ToSharedRef(),10);
 }
 void AFootballController::RunProjectChecks(){
@@ -525,9 +537,17 @@ void AFootballController::UpdateDemo(float Dt){
   const FVector BallVelocity=M->Ball->GetPhysicsLinearVelocity();
   const FVector Right=Avatar->GetActorRightVector();
   M->Ball->SetPhysicsLinearVelocity(BallVelocity+Right*(SideError*8.f-FVector::DotProduct(BallVelocity,Right)));
-  if(T-DemoReceiveAt>=.6f&&FVector::Dist2D(DemoReceivePosition,Avatar->GetActorLocation())>=250.f&&M->HasBall(Avatar))
+  if(DemoShotTargetX==0.f)
   {
-   FireShot(1.f);if(PendingShot){DemoPhase=1;DemoShotAt=T;}
+   static const float Distances[]={500.f,800.f,1100.f,1400.f,1700.f,2100.f};
+   int32 Choice=FMath::RandRange(0,UE_ARRAY_COUNT(Distances)-1);
+   if(Choice==DemoShotDistanceIndex)Choice=(Choice+FMath::RandRange(1,UE_ARRAY_COUNT(Distances)-1))%UE_ARRAY_COUNT(Distances);
+   DemoShotDistanceIndex=Choice;DemoShotTargetX=Distances[Choice]*DemoDirection;
+  }
+  const bool ReachedShotPoint=DemoDirection>0?Avatar->GetActorLocation().X>=DemoShotTargetX:Avatar->GetActorLocation().X<=DemoShotTargetX;
+  if(T-DemoReceiveAt>=.35f&&ReachedShotPoint&&M->HasBall(Avatar))
+  {
+   FireShot(1.f);if(PendingShot){DemoPhase=1;DemoShotAt=T;DemoShotTargetX=0.f;}
   }
  }
 }

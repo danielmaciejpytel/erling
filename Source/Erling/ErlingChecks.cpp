@@ -13,15 +13,17 @@
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
 #include "SkeletalRenderPublic.h"
+#include "Kismet/GameplayStatics.h"
 
 void AFootballController::RunChecks()
 {
     const double Now=GetWorld()->GetTimeSeconds();
-    static bool JumpModelVisible=true,DemoTwoSteps=true,DemoContinuous=true;
-    static float BallControlDribbleDistance=0.f,RunDribbleDistance=0.f;
+    static bool JumpModelVisible=true,DemoTwoSteps=true,DemoContinuous=true,DemoVariedShotDistance=true,DemoShotRangeOk=true,DemoNoPostShotGlide=true;
+    static float BallControlDribbleDistance=0.f,RunDribbleDistance=0.f,LastDemoShotAbsX=-1.f;
     static int DemoShots=0;
     static bool DemoLeft=false,DemoRight=false,DemoWasPending=false;
-    static FVector LastDemoBall=FVector::ZeroVector,SettingsPlayerBefore=FVector::ZeroVector,SettingsBallBefore=FVector::ZeroVector;
+    static FVector LastDemoBall=FVector::ZeroVector,SettingsPlayerBefore=FVector::ZeroVector,SettingsBallBefore=FVector::ZeroVector,DemoPostShotPosition=FVector::ZeroVector;
+    static bool DemoPostShotTracking=false;
     static FString SettingsAnimationBefore;
     static float SettingsAnimationTimeBefore=0.f;
     static int PreviousDemoPhase=0,DemoTurns=0;
@@ -46,8 +48,13 @@ void AFootballController::RunChecks()
         {
             DemoShots++;DemoLeft|=Avatar->CurrentAnimation==TEXT("Kick_Left");DemoRight|=Avatar->CurrentAnimation==TEXT("Kick_Right");
             DemoTwoSteps&=Now-DemoReceiveAt>=.6f&&FVector::Dist2D(DemoReceivePosition,Avatar->GetActorLocation())>=250;
+            const float ShotAbsX=FMath::Abs(Avatar->GetActorLocation().X);DemoShotRangeOk&=ShotAbsX>=470.f&&ShotAbsX<=2130.f;
+            if(LastDemoShotAbsX>=0)DemoVariedShotDistance&=FMath::Abs(ShotAbsX-LastDemoShotAbsX)>120.f;LastDemoShotAbsX=ShotAbsX;
             UE_LOG(LogTemp,Display,TEXT("DEMO_SHOT foot=%s x=%f receive_time=%f travel=%f"),*Avatar->CurrentAnimation,Avatar->GetActorLocation().X,Now-DemoReceiveAt,FVector::Dist2D(DemoReceivePosition,Avatar->GetActorLocation()));
         }
+        if(DemoWasPending&&!PendingShot&&DemoPhase==1){DemoPostShotPosition=Avatar->GetActorLocation();DemoPostShotTracking=true;}
+        if(DemoPostShotTracking&&DemoPhase==1&&!PendingShot)DemoNoPostShotGlide&=FVector::Dist2D(DemoPostShotPosition,Avatar->GetActorLocation())<8.f;
+        if(DemoPhase!=1)DemoPostShotTracking=false;
         if(PendingShot&&DemoWasPending)DemoContinuous&=FVector::Dist(LastDemoBall,M->Ball->GetComponentLocation())<60;
         DemoWasPending=PendingShot;LastDemoBall=M->Ball->GetComponentLocation();
     }
@@ -203,6 +210,9 @@ void AFootballController::RunChecks()
         Check(TEXT("demo_receives_and_runs_two_steps"),DemoShots>=2&&DemoTwoSteps);
         Check(TEXT("demo_uses_both_feet"),DemoLeft&&DemoRight);
         Check(TEXT("demo_ball_windup_continuous"),DemoContinuous);Screenshot(TEXT("14_Demo"));
+        Check(TEXT("demo_randomizes_shot_distance"),DemoShots>=2&&DemoVariedShotDistance);
+        Check(TEXT("demo_never_shoots_beyond_penalty_line"),DemoShots>=2&&DemoShotRangeOk);
+        Check(TEXT("demo_stops_gliding_after_shot"),DemoShots>=2&&DemoNoPostShotGlide);
         Saved->PauseInSettings=false;SettingsReturn=EScreen::Main;ChangeScreen(EScreen::Settings);Check(TEXT("settings_default_does_not_pause_world"),!IsPaused());ChangeScreen(EScreen::Main);Check(TEXT("settings_return_stays_unpaused"),!IsPaused());
         ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();BallControlOn();Wait=1.2f;break;
     case 50:
@@ -256,7 +266,11 @@ void AFootballController::RunChecks()
         SettingsPlayerBefore=Avatar->GetActorLocation();SettingsBallBefore=Mode->Ball->GetComponentLocation();SettingsAnimationBefore=Avatar->CurrentAnimation;SettingsAnimationTimeBefore=Avatar->AnimationTime;Wait=0.f;break;
     case 62:
         Check(TEXT("paused_settings_preserves_player"),FVector::Dist(SettingsPlayerBefore,Avatar->GetActorLocation())<.1f);Check(TEXT("paused_settings_preserves_ball"),FVector::Dist(SettingsBallBefore,Mode->Ball->GetComponentLocation())<.1f);Check(TEXT("paused_settings_preserves_animation"),Avatar->CurrentAnimation==SettingsAnimationBefore&&FMath::Abs(Avatar->AnimationTime-SettingsAnimationTimeBefore)<.001f);
-        Saved->PauseInSettings=false;SetPause(false);ChangeScreen(EScreen::Main);Check(TEXT("pause_in_settings_off_resumes_world"),!IsPaused());ResetPlayer();Wait=.1f;break;
+        Saved->PauseInSettings=false;SetPause(false);ChangeScreen(EScreen::Main);Check(TEXT("pause_in_settings_off_resumes_world"),!IsPaused());
+        Saved->Language=0;Check(TEXT("language_english_text"),Localize(TEXT("Settings"),TEXT("Ustawienia"))==TEXT("Settings"));
+        Saved->Language=1;Check(TEXT("language_polish_text"),Localize(TEXT("Settings"),TEXT("Ustawienia"))==TEXT("Ustawienia"));UGameplayStatics::SaveGameToSlot(Saved,TEXT("ErlingProfile_Test"),0);
+        {auto Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("language_persistence"),Loaded&&Loaded->Language==1);}
+        Saved->Language=0;UGameplayStatics::SaveGameToSlot(Saved,TEXT("ErlingProfile_Test"),0);ResetPlayer();Wait=.1f;break;
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
         FPlatformMisc::RequestExit(false);return;

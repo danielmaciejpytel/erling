@@ -232,7 +232,15 @@ void AFootballController::UpdateActions(float Dt)
                 PendingVelocity=Delta.GetSafeNormal2D()*PendingVelocity.Size2D();
                 PendingVelocity.Z=Delta.Z/Flight-.5f*GetWorld()->GetGravityZ()*Flight;
             }
-            if(!Mode->LaunchShot(Avatar,PendingVelocity))PendingTrip=false;
+            const bool Launched=Mode->LaunchShot(Avatar,PendingVelocity);
+            if(!Launched)PendingTrip=false;
+            const bool Demo=ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits;
+            if(Launched&&Demo)
+            {
+                Avatar->EntryVelocity=FVector::ZeroVector;
+                Avatar->ActionVelocity=FVector::ZeroVector;
+                Avatar->GetCharacterMovement()->StopMovementImmediately();
+            }
         }
     }
     if(PendingTrip&&!PendingShot&&Avatar->ActionElapsed>=ShotRecoverTime)
@@ -257,7 +265,7 @@ void AFootballController::CycleAnimationPreview(int32 Direction)
 }
 FText AFootballController::PreviewAnimationText()const
 {
-    static const TMap<FString,FString> Labels={
+    static const TMap<FString,FString> LabelsEn={
         {TEXT("Walk"),TEXT("Walk")},{TEXT("Run"),TEXT("Run")},{TEXT("Sprint"),TEXT("Sprint")},
         {TEXT("Kick_Right"),TEXT("Right-Foot Kick")},{TEXT("Kick_Left"),TEXT("Left-Foot Kick")},
         {TEXT("Jump"),TEXT("Jump")},{TEXT("Jump_Run"),TEXT("Running Jump")},
@@ -270,7 +278,22 @@ FText AFootballController::PreviewAnimationText()const
         {TEXT("Idle_LookAround"),TEXT("Looking Around")},{TEXT("Idle_WeightShift"),TEXT("Weight Shift")},
         {TEXT("Meme_RageStomp"),TEXT("Rage Stomp")},{TEXT("Meme_Shrug"),TEXT("Shrug")},
         {TEXT("Turn_Step"),TEXT("Step Turn")}};
-    return FText::FromString(Avatar&&Avatar->PreviewAnimation?Labels.FindRef(Avatar->CurrentAnimation):TEXT("Idle"));
+    static const TMap<FString,FString> LabelsPl={
+        {TEXT("Walk"),TEXT("Chód")},{TEXT("Run"),TEXT("Bieg")},{TEXT("Sprint"),TEXT("Sprint")},
+        {TEXT("Kick_Right"),TEXT("Strzał prawą nogą")},{TEXT("Kick_Left"),TEXT("Strzał lewą nogą")},
+        {TEXT("Jump"),TEXT("Skok")},{TEXT("Jump_Run"),TEXT("Skok z biegu")},
+        {TEXT("JoyJump_Run"),TEXT("Cieszynka w biegu")},{TEXT("JoyJump_Standing"),TEXT("Skok z radości")},
+        {TEXT("Shot_Flip_Land"),TEXT("Strzał z saltem")},{TEXT("Slide_From_Run"),TEXT("Wślizg")},
+        {TEXT("Trip_Roll_From_Run"),TEXT("Potknięcie i przewrót")},{TEXT("Celebrate_Victory"),TEXT("Zwycięstwo")},
+        {TEXT("Dance_Disco"),TEXT("Taniec disco")},{TEXT("Dance_Robot"),TEXT("Taniec robota")},
+        {TEXT("Fall_Backward"),TEXT("Upadek do tyłu")},{TEXT("GetUp_Back"),TEXT("Wstawanie z pleców")},
+        {TEXT("GetUp_Front"),TEXT("Wstawanie z brzucha")},{TEXT("Idle_Breathe"),TEXT("Oddychanie")},
+        {TEXT("Idle_LookAround"),TEXT("Rozglądanie się")},{TEXT("Idle_WeightShift"),TEXT("Przenoszenie ciężaru")},
+        {TEXT("Meme_RageStomp"),TEXT("Wściekłe tupanie")},{TEXT("Meme_Shrug"),TEXT("Wzruszenie ramion")},
+        {TEXT("Turn_Step"),TEXT("Obrót krokiem")}};
+    if(!Avatar||!Avatar->PreviewAnimation)return FText::FromString(Localize(TEXT("Idle"),TEXT("Bezczynność")));
+    const auto& Labels=Saved&&Saved->Language==1?LabelsPl:LabelsEn;
+    return FText::FromString(Labels.FindRef(Avatar->CurrentAnimation));
 }
 void AFootballController::BallControlOn(){if(Screen!=EScreen::Game||!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(!Mode||!Mode->HasBall(Avatar))return;BallControlHeld=true;if(!Sprint)Avatar->GetCharacterMovement()->MaxWalkSpeed=180;}
 void AFootballController::BallControlOff(){BallControlHeld=false;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=Sprint?765:510;}
