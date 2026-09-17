@@ -2,7 +2,7 @@
 
 **Erling** is a stylized football playground and modular character creator built in **Unreal Engine 5.8** as a gameplay, animation and UI portfolio project.
 
-The current prototype focuses on making a small football sandbox feel responsive: the player can walk, run, sprint, dribble, charge shots, jump, slide and celebrate goals while the ball remains physically simulated and visually tied to the character's movement.
+The current prototype focuses on making a small football sandbox feel responsive: the player can run, sprint, dribble, charge shots, jump, slide and celebrate goals while the ball remains physically simulated and visually tied to the character's movement.
 
 ## Highlights
 
@@ -21,7 +21,7 @@ The current prototype focuses on making a small football sandbox feel responsive
 | --- | --- | --- |
 | Move | `WASD` | Left stick |
 | Camera | Mouse | Right stick |
-| Walk | `Left Ctrl` | `LT` |
+| Ball control | `Left Ctrl` | `LT` |
 | Sprint | `Left Shift` | `RT` |
 | Jump / goal celebration | `Space` | `A` |
 | Charge and release shot | Hold / release `LMB` | Hold / release `X` |
