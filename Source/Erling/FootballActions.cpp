@@ -148,6 +148,12 @@ bool AFootballMode::HasBall(const AFootballPlayer* P)const
     const FVector Delta=Ball->GetComponentLocation()-P->GetActorLocation();
     return Delta.Size2D()<205&&Delta.Z< -25&&Delta.Z> -125;
 }
+bool AFootballMode::HasDribbleControl(const AFootballPlayer* P)const
+{
+    if(!P||!Ball||Scored||BallHidden||ShotInFlight||P->GetCharacterMovement()->IsFalling())return false;
+    const FVector Delta=Ball->GetComponentLocation()-P->GetActorLocation();
+    return Delta.Size2D()<=230.f&&Delta.Z<=-35.f;
+}
 bool AFootballMode::LaunchShot(AFootballPlayer* P,const FVector& Velocity)
 {
     if(!P||!Ball||BallHidden||Scored||FVector::Dist2D(Ball->GetComponentLocation(),P->GetActorLocation())>240)return false;
@@ -192,7 +198,8 @@ void AFootballController::CancelPendingActions()
 }
 void AFootballController::UpdateActions(float Dt)
 {
-    if((Screen!=EScreen::Game&&Screen!=EScreen::Main&&Screen!=EScreen::Credits)||!Avatar)return;
+    const EScreen ActiveScreen=Screen==EScreen::Settings?SettingsReturn:Screen;
+    if((ActiveScreen!=EScreen::Game&&ActiveScreen!=EScreen::Main&&ActiveScreen!=EScreen::Credits)||!Avatar)return;
     const float Now=GetWorld()->GetTimeSeconds();
     if(GoalSpacePending)
     {
@@ -206,7 +213,7 @@ void AFootballController::UpdateActions(float Dt)
             // Keep the possessed ball at the striking foot during the short wind-up.
             const float Side=Avatar->CurrentAnimation==TEXT("Kick_Left")?-18.f:18.f;
             const FVector Contact=Avatar->GetActorLocation()+Avatar->GetActorForwardVector()*82+Avatar->GetActorRightVector()*Side-FVector(0,0,74);
-            const bool Demo=Screen==EScreen::Main||Screen==EScreen::Credits;
+            const bool Demo=ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits;
             const float ContactBlend=FMath::SmoothStep(0.f,1.f,FMath::Clamp(Avatar->ActionElapsed/FMath::Max(.01f,ShotContactTime),0.f,1.f));
             const FVector Position=Demo?FMath::Lerp(ShotBallStart+Avatar->GetActorLocation()-ShotActorStart,Contact,ContactBlend):Contact;
             Mode->Ball->SetWorldLocation(Position,false,nullptr,ETeleportType::TeleportPhysics);
@@ -265,5 +272,5 @@ FText AFootballController::PreviewAnimationText()const
         {TEXT("Turn_Step"),TEXT("Step Turn")}};
     return FText::FromString(Avatar&&Avatar->PreviewAnimation?Labels.FindRef(Avatar->CurrentAnimation):TEXT("Idle"));
 }
-void AFootballController::WalkOn(){if(Screen==EScreen::Game){WalkHeld=true;if(Avatar&&!Sprint)Avatar->GetCharacterMovement()->MaxWalkSpeed=180;}}
-void AFootballController::WalkOff(){WalkHeld=false;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=Sprint?765:510;}
+void AFootballController::BallControlOn(){if(Screen!=EScreen::Game||!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(!Mode||!Mode->HasBall(Avatar))return;BallControlHeld=true;if(!Sprint)Avatar->GetCharacterMovement()->MaxWalkSpeed=180;}
+void AFootballController::BallControlOff(){BallControlHeld=false;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=Sprint?765:510;}

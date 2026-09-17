@@ -18,6 +18,7 @@ public:
  UPROPERTY() float Volume=.7f;
  UPROPERTY() float EffectsVolume=1.f;
  UPROPERTY() bool ReducedMotion=false;
+ UPROPERTY() bool PauseInSettings=false;
  UPROPERTY() int32 CameraMode=-1;
  UPROPERTY() int32 Quality=2;
 };
@@ -63,7 +64,7 @@ public:
  bool SprintKickPending=false; int32 SprintDribbleTouchCount=0;
  void Dribble(AFootballPlayer* Player,float Dt);
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
- bool HasBall(const AFootballPlayer* Player)const;
+ bool HasBall(const AFootballPlayer* Player)const; bool HasDribbleControl(const AFootballPlayer* Player)const;
  bool LaunchShot(AFootballPlayer* Player,const FVector& Velocity);
  TWeakObjectPtr<AFootballPlayer> LastShooter;
  UStaticMeshComponent* Box(const FVector& P,const FVector& Size,const FLinearColor& Color,bool Collision=true);
@@ -97,7 +98,7 @@ public:
  UPROPERTY(Config) float SlideSprintMultiplier=1.25f;
  UPROPERTY(Config) float TripChance=.33f;
  int32 PreviewIndex=-1; void CycleAnimationPreview(int32 Direction); FText PreviewAnimationText()const;
- bool WalkHeld=false; void WalkOn(); void WalkOff();
+ bool BallControlHeld=false; void BallControlOn(); void BallControlOff();
  void RunChecks(); int32 TestStage_Latest=0; double TestAt=0; FString Report;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
  TSharedPtr<SWidget> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
@@ -107,4 +108,3 @@ public:
  FText OptionText(int32 Index) const;
  void RunProjectChecks(); int32 TestStage=0; double TestStarted=0; FString TestReport; FVector TestPosition; bool TestJumpObserved=false;
 };
-
