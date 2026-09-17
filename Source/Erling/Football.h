@@ -19,6 +19,7 @@ public:
  UPROPERTY() float EffectsVolume=1.f;
  UPROPERTY() bool ReducedMotion=false;
  UPROPERTY() bool PauseInSettings=false;
+ UPROPERTY() int32 Language=0;
  UPROPERTY() int32 CameraMode=-1;
  UPROPERTY() int32 Quality=2;
 };
@@ -84,7 +85,7 @@ public:
  void PlayEffect(const FString& Name,float Gain=1.f); void UpdateEffectsVolume(float V);
  float EditorZoom=0; bool Dragging=false,MouseWasDown=false; float LastMouseX=0;
  bool Charging=false; float ChargeStarted=0; void StartCharge(); void ReleaseCharge(); void FireShot(float Seconds); void UpdateDemo(float Dt);
- int DemoDirection=1,DemoPhase=0; float DemoShotAt=0;
+ int DemoDirection=1,DemoPhase=0,DemoShotDistanceIndex=-1; float DemoShotAt=0,DemoShotTargetX=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
  void SlidePressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
@@ -105,6 +106,8 @@ public:
  FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
  float UpdatePitchCameraLead(float Dt);
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
+ FString Localize(const TCHAR* English,const TCHAR* Polish) const;
+ FString LocalizeCatalogLabel(const FString& Value) const;
  FText OptionText(int32 Index) const;
  void RunProjectChecks(); int32 TestStage=0; double TestStarted=0; FString TestReport; FVector TestPosition; bool TestJumpObserved=false;
 };
