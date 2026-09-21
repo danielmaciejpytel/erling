@@ -2,7 +2,7 @@
   "FileVersion": 3,
   "EngineAssociation": "5.8",
   "Category": "Games",
-  "Description": "Erling — character creator and football playground",
+  "Description": "Erling \u2014 character creator and football playground",
   "Plugins": [
     {
       "Name": "PythonScriptPlugin",
@@ -18,7 +18,11 @@
       "Type": "Runtime",
       "LoadingPhase": "Default",
       "Name": "Erling"
+    },
+    {
+      "Name": "ErlingUIEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
     }
   ]
 }
-

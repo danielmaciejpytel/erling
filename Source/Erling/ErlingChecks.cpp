@@ -20,9 +20,27 @@ void AFootballController::RunChecks()
     const double Now=GetWorld()->GetTimeSeconds();
     static bool JumpModelVisible=true,DemoTwoSteps=true,DemoContinuous=true,DemoVariedShotDistance=true,DemoShotRangeOk=true,DemoNoPostShotGlide=true;
     static float BallControlDribbleDistance=0.f,RunDribbleDistance=0.f,LastDemoShotAbsX=-1.f;
+    static float DemoCarryMinGap=MAX_flt,DemoCarryMaxGap=0.f,DemoCarryMaxFootDistance=0.f,DemoCarryMaxRelativeSpeed=0.f;
+    static int32 DemoCarrySamples=0;
+    static FVector DemoWaitingBallAnchor=FVector::ZeroVector,ShotWindupStart=FVector::ZeroVector;
+    static float DemoWaitingMaxDrift=0.f,DemoFirstReceiveGap=MAX_flt,DemoFirstReceiveFootDistance=MAX_flt,ShotWindupMaxDisplacement=0.f;
+    static int32 DemoWaitingSamples=0,ShotWindupSamples=0;
+    static bool DemoWaitingTracking=false;
     static int DemoShots=0;
     static bool DemoLeft=false,DemoRight=false,DemoWasPending=false;
-    static FVector LastDemoBall=FVector::ZeroVector,SettingsPlayerBefore=FVector::ZeroVector,SettingsBallBefore=FVector::ZeroVector,DemoPostShotPosition=FVector::ZeroVector;
+    static FVector LastDemoBall=FVector::ZeroVector,SettingsPlayerBefore=FVector::ZeroVector,SettingsBallBefore=FVector::ZeroVector,DemoPostShotPosition=FVector::ZeroVector,HeldBallPosition=FVector::ZeroVector;
+    static float VideoTurnMinDirectionAhead=MAX_flt,VideoTurnMinBodyAhead=MAX_flt,VideoTurnMaxGap=0.f;
+    static int32 VideoTurnSamples=0;
+    static float SprintStressMinBodyAhead=MAX_flt,SprintStressMaxGap=0.f;
+    static int32 SprintStressSamples=0,SprintStressLostControlFrames=0;
+    static float SprintChaseMaxYawStep=0.f,SprintChasePreviousYaw=0.f;
+    static int32 SprintChaseYawSamples=0;
+    static bool SprintChaseYawPrimed=false;
+    static float NaturalBufferCommitAge=-1.f,NaturalBufferMinFoot=MAX_flt;
+    static bool NaturalBufferWasActive=false;
+    static FVector PivotExpectedLocal=FVector::ZeroVector;
+    static float PivotMaxLocalDrift=0.f;
+    static int32 PivotSamples=0;
     static bool DemoPostShotTracking=false;
     static FString SettingsAnimationBefore;
     static float SettingsAnimationTimeBefore=0.f;
@@ -56,10 +74,109 @@ void AFootballController::RunChecks()
         if(DemoPostShotTracking&&DemoPhase==1&&!PendingShot)DemoNoPostShotGlide&=FVector::Dist2D(DemoPostShotPosition,Avatar->GetActorLocation())<8.f;
         if(DemoPhase!=1)DemoPostShotTracking=false;
         if(PendingShot&&DemoWasPending)DemoContinuous&=FVector::Dist(LastDemoBall,M->Ball->GetComponentLocation())<60;
+        if(DemoWaitingTracking&&M->Ball)
+        {
+            if(DemoPhase==0)
+            {
+                DemoWaitingMaxDrift=FMath::Max(DemoWaitingMaxDrift,FVector::Dist2D(DemoWaitingBallAnchor,M->Ball->GetComponentLocation()));
+                DemoWaitingSamples++;
+            }
+            else if(DemoPhase==2)
+            {
+                DemoFirstReceiveGap=FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+                if(Avatar->GetMesh())
+                    DemoFirstReceiveFootDistance=FMath::Min(FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+                DemoWaitingTracking=false;
+            }
+        }
+        if(DemoPhase==2&&M->Ball&&Now-DemoReceiveAt>.35f)
+        {
+            const float Gap=FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+            DemoCarryMinGap=FMath::Min(DemoCarryMinGap,Gap);DemoCarryMaxGap=FMath::Max(DemoCarryMaxGap,Gap);
+            if(Avatar->GetMesh())
+            {
+                const float FootDistance=FMath::Min(FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(M->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+                DemoCarryMaxFootDistance=FMath::Max(DemoCarryMaxFootDistance,FootDistance);
+            }
+            DemoCarryMaxRelativeSpeed=FMath::Max(DemoCarryMaxRelativeSpeed,(M->Ball->GetPhysicsLinearVelocity()-Avatar->GetVelocity()).Size2D());
+            DemoCarrySamples++;
+        }
         DemoWasPending=PendingShot;LastDemoBall=M->Ball->GetComponentLocation();
     }
-    if(TestStage_Latest==19||TestStage_Latest==20||TestStage_Latest==50||TestStage_Latest==51||TestStage_Latest==52)Forward(1);
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;TestAt=Now+4;return;}
+    if(TestStage_Latest>=77&&TestStage_Latest<=79&&Avatar)
+    {
+        if(auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();M&&M->Ball&&M->HasDribbleControl(Avatar))
+        {
+            FVector Rel=M->Ball->GetComponentLocation()-Avatar->GetActorLocation();Rel.Z=0;
+            const FVector DribbleForward=M->DribbleDirection.GetSafeNormal2D();
+            const FVector BodyForward=Avatar->GetActorForwardVector().GetSafeNormal2D();
+            if(!DribbleForward.IsNearlyZero())VideoTurnMinDirectionAhead=FMath::Min(VideoTurnMinDirectionAhead,FVector::DotProduct(Rel,DribbleForward));
+            if(!BodyForward.IsNearlyZero())VideoTurnMinBodyAhead=FMath::Min(VideoTurnMinBodyAhead,FVector::DotProduct(Rel,BodyForward));
+            VideoTurnMaxGap=FMath::Max(VideoTurnMaxGap,Rel.Size2D());VideoTurnSamples++;
+        }
+    }
+    if(TestStage_Latest>=81&&TestStage_Latest<=88&&Avatar)
+    {
+        if(auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();M&&M->Ball)
+        {
+            FVector Rel=M->Ball->GetComponentLocation()-Avatar->GetActorLocation();Rel.Z=0;
+            const FVector BodyForward=Avatar->GetActorForwardVector().GetSafeNormal2D();
+            SprintStressMaxGap=FMath::Max(SprintStressMaxGap,Rel.Size2D());
+            if(!BodyForward.IsNearlyZero())SprintStressMinBodyAhead=FMath::Min(SprintStressMinBodyAhead,FVector::DotProduct(Rel,BodyForward));
+            if(!M->HasDribbleControl(Avatar))SprintStressLostControlFrames++;
+            SprintStressSamples++;
+        }
+    }
+    if(TestStage_Latest==97&&Avatar)
+    {
+        if(auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();M&&M->Ball&&PendingShot)
+        {
+            ShotWindupMaxDisplacement=FMath::Max(ShotWindupMaxDisplacement,FVector::Dist2D(ShotWindupStart,M->Ball->GetComponentLocation()));
+            ShotWindupSamples++;
+        }
+    }
+    if(TestStage_Latest==102&&Avatar)
+    {
+        const float YawNow=Avatar->GetActorRotation().Yaw;
+        if(SprintChaseYawPrimed)
+            SprintChaseMaxYawStep=FMath::Max(SprintChaseMaxYawStep,FMath::Abs(FMath::FindDeltaAngleDegrees(SprintChasePreviousYaw,YawNow)));
+        SprintChasePreviousYaw=YawNow;SprintChaseYawPrimed=true;SprintChaseYawSamples++;
+    }
+    if(TestStage_Latest==106&&Avatar)
+    {
+        if(auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();M&&M->Ball)
+        {
+            const FVector Local=M->Ball->GetComponentLocation();
+            const FVector CurrentLocal=Avatar->GetActorTransform().InverseTransformPosition(Local);
+            PivotMaxLocalDrift=FMath::Max(PivotMaxLocalDrift,FVector::Dist2D(CurrentLocal,PivotExpectedLocal));
+            PivotSamples++;
+        }
+    }
+    if(TestStage_Latest==152&&Avatar)
+    {
+        if(auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();M&&M->Ball&&Avatar->GetMesh())
+        {
+            const FVector Ball=M->Ball->GetComponentLocation();
+            const float FootDistance=FMath::Min(FVector::Dist2D(Ball,Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Ball,Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
+            NaturalBufferMinFoot=FMath::Min(NaturalBufferMinFoot,FootDistance);
+            if(NaturalBufferWasActive&&!ShotBufferActive&&(PendingShot||M->ShotInFlight)&&NaturalBufferCommitAge<0.f)
+                NaturalBufferCommitAge=Now-ShotBufferStarted;
+            NaturalBufferWasActive=ShotBufferActive;
+        }
+    }
+    if(TestStage_Latest==19||TestStage_Latest==20||TestStage_Latest==50||TestStage_Latest==51||TestStage_Latest==52||TestStage_Latest==64||TestStage_Latest==66||TestStage_Latest==69||TestStage_Latest==72||TestStage_Latest==73)Forward(1);
+    if(TestStage_Latest==65||TestStage_Latest==67||TestStage_Latest==90)Forward(-1);
+    if(TestStage_Latest==68)Right(1);
+    if(TestStage_Latest==81||TestStage_Latest==85)Forward(1);
+    if(TestStage_Latest==83||TestStage_Latest==87||TestStage_Latest==90||TestStage_Latest==92)Forward(-1);
+    if(TestStage_Latest==82||TestStage_Latest==86)Right(1);
+    if(TestStage_Latest==84||TestStage_Latest==88)Right(-1);
+    if(TestStage_Latest==94)Right(1);
+    if(TestStage_Latest==102)Right(-1);
+    if(TestStage_Latest==124)Forward(-1);
+    if(TestStage_Latest==128)Right(-1);
+    if(TestStage_Latest==144)Forward(-1);
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -68,6 +185,28 @@ void AFootballController::RunChecks()
     auto Screenshot=[](const TCHAR* Name){FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir()/TEXT("Screenshots_Latest")/(FString(Name)+TEXT(".png")),true,false);};
     auto PlaceBall=[&](){Mode->ResetBall();Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+Avatar->GetActorForwardVector()*125-FVector(0,0,74),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);};
     auto ResetPlayer=[&](){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;Avatar->SetAnimation(TEXT("Idle_Breathe"));Avatar->AnimationBlend=1;Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);KickCooldown=0;};
+    auto PutBallAtNearestFoot=[&]()
+    {
+        const FVector Ball=Mode->Ball->GetComponentLocation();
+        const FVector Left=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));
+        const FVector RightFoot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"));
+        const FVector Foot=FVector::Dist2D(Ball,Left)<=FVector::Dist2D(Ball,RightFoot)?Left:RightFoot;
+        Mode->Ball->SetWorldLocation(FVector(Foot.X+38.f,Foot.Y,Mode->Ball->GetComponentLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);
+        Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+    };
+    auto BeginLooseBufferedShot=[&](float Power,const FVector& LoosePlanar)
+    {
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(125,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);
+        Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        StartCharge();ChargeStarted=Now-Power;
+        Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.2f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+2.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(LoosePlanar.X,LoosePlanar.Y,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);
+        Mode->Ball->SetPhysicsLinearVelocity(FVector(760,0,0));
+        ReleaseCharge();
+        SprintOff();
+    };
     auto VisiblePose=[&](const TCHAR* Label)
     {
         TArray<USkeletalMeshComponent*> Parts=Avatar->Pieces;Parts.Add(Avatar->GetMesh());Parts.Add(Avatar->Face);
@@ -201,9 +340,11 @@ void AFootballController::RunChecks()
             Screenshot(TEXT("Held_JoyJump_Run"));break;
         }
     case 46:
-        ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));Wait=.1f;break;
+        ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));
+        DemoCarryMinGap=MAX_flt;DemoCarryMaxGap=0.f;DemoCarryMaxFootDistance=0.f;DemoCarryMaxRelativeSpeed=0.f;DemoCarrySamples=0;
+        DemoWaitingBallAnchor=Mode->Ball->GetComponentLocation();DemoWaitingMaxDrift=0.f;DemoWaitingSamples=0;DemoFirstReceiveGap=MAX_flt;DemoFirstReceiveFootDistance=MAX_flt;DemoWaitingTracking=true;Wait=.1f;break;
     case 47:Wait=.1f;break;
-    case 48:Wait=13.f;break;
+    case 48:Wait=15.f;break;
     case 49:
         Check(TEXT("demo_turns_without_extra_run"),DemoTurns>=2&&DemoTurnsPromptly);
         Check(TEXT("demo_turn_preserves_ball_flight"),DemoTurns>=2&&DemoKeepsShotInFlight);
@@ -213,6 +354,11 @@ void AFootballController::RunChecks()
         Check(TEXT("demo_randomizes_shot_distance"),DemoShots>=2&&DemoVariedShotDistance);
         Check(TEXT("demo_never_shoots_beyond_penalty_line"),DemoShots>=2&&DemoShotRangeOk);
         Check(TEXT("demo_stops_gliding_after_shot"),DemoShots>=2&&DemoNoPostShotGlide);
+        UE_LOG(LogTemp,Display,TEXT("DEMO_CARRY samples=%d min_gap=%f max_gap=%f max_foot_distance=%f max_relative_speed=%f"),DemoCarrySamples,DemoCarryMinGap,DemoCarryMaxGap,DemoCarryMaxFootDistance,DemoCarryMaxRelativeSpeed);
+        UE_LOG(LogTemp,Display,TEXT("DEMO_WAITING samples=%d max_drift=%f receive_gap=%f receive_foot=%f"),DemoWaitingSamples,DemoWaitingMaxDrift,DemoFirstReceiveGap,DemoFirstReceiveFootDistance);
+        Check(TEXT("demo_waiting_ball_stays_fixed_until_runner_arrives"),DemoWaitingSamples>5&&DemoWaitingMaxDrift<2.f);
+        Check(TEXT("demo_dribble_starts_only_at_real_foot_contact"),DemoFirstReceiveGap<118.f&&DemoFirstReceiveFootDistance<=66.f);
+        Check(TEXT("demo_background_ball_rolls_instead_of_sticking_to_boot"),DemoCarrySamples>100&&DemoCarryMaxFootDistance>70.f&&DemoCarryMaxRelativeSpeed>70.f);
         Saved->PauseInSettings=false;SettingsReturn=EScreen::Main;ChangeScreen(EScreen::Settings);Check(TEXT("settings_default_does_not_pause_world"),!IsPaused());ChangeScreen(EScreen::Main);Check(TEXT("settings_return_stays_unpaused"),!IsPaused());
         ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();BallControlOn();Wait=1.2f;break;
     case 50:
@@ -225,15 +371,15 @@ void AFootballController::RunChecks()
         RunDribbleDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
         {const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
         UE_LOG(LogTemp,Display,TEXT("DRIBBLE_RUN player=%f foot=%f"),RunDribbleDistance,FootDistance);
-        Check(TEXT("run_dribble_close"),RunDribbleDistance<120.f&&RunDribbleDistance>BallControlDribbleDistance-10.f);Check(TEXT("run_dribble_tracks_foot"),FootDistance<90.f);}
+        Check(TEXT("run_dribble_close"),RunDribbleDistance<100.f&&RunDribbleDistance>BallControlDribbleDistance-10.f);Check(TEXT("run_dribble_tracks_foot"),FootDistance<80.f);}
         Mode->SprintDribbleTouchCount=0;Mode->DribbleMinFootClearance=MAX_flt;Mode->SprintDribbleMinDistance=MAX_flt;Mode->SprintDribbleMaxDistance=0;SprintOn();BallControlOn();Wait=2.4f;break;
     case 52:
         {const float SprintDistance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const float FootDistance=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
-        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_SPRINT player=%f foot=%f"),SprintDistance,FootDistance);
+        UE_LOG(LogTemp,Display,TEXT("DRIBBLE_SPRINT player=%f foot=%f min=%f max=%f touches=%d"),SprintDistance,FootDistance,Mode->SprintDribbleMinDistance,Mode->SprintDribbleMaxDistance,Mode->SprintDribbleTouchCount);
         Check(TEXT("sprint_dribble_releases_forward"),Mode->SprintDribbleMaxDistance>RunDribbleDistance+20.f&&Mode->SprintDribbleMaxDistance<210.f);
         Check(TEXT("sprint_dribble_returns_for_touch"),Mode->SprintDribbleMinDistance<110.f&&Mode->SprintDribbleTouchCount>0);
-        Check(TEXT("dribble_never_penetrates_feet"),Mode->DribbleMinFootClearance>=31.5f);
-        Check(TEXT("sprint_touch_reaches_foot_surface"),Mode->DribbleMinFootClearance<=35.5f);}
+        Check(TEXT("dribble_never_penetrates_feet"),Mode->DribbleMinFootClearance>=37.5f);
+        Check(TEXT("sprint_touch_reaches_foot_surface"),Mode->DribbleMinFootClearance<=41.5f);}
         Check(TEXT("sprint_dribble_wins_over_ball_control"),Sprint&&BallControlHeld&&Avatar->GetCharacterMovement()->MaxWalkSpeed>700.f);
         Forward(0);SprintOff();BallControlOff();ResetPlayer();Avatar->ConsumeMovementInputVector();Saved->CameraMode=0;Yaw=0;Mode->Ball->SetWorldLocation(FVector(1500,1000,22),false,nullptr,ETeleportType::TeleportPhysics);
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
@@ -256,7 +402,7 @@ void AFootballController::RunChecks()
     case 58:
         {const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const float FootD=FMath::Min(FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"))));
         UE_LOG(LogTemp,Display,TEXT("DRIBBLE_BALL_CONTROL_TURN player=%f foot=%f active=%d"),D,FootD,BallControlHeld?1:0);Check(TEXT("ball_control_stays_active_through_turn"),BallControlHeld);Check(TEXT("ball_control_dribble_stays_attached_through_turn"),D<95.f&&FootD<70.f);}
-        Right(0);BallControlOff();ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;DemoShots=0;DemoWasPending=false;PreviousDemoPhase=0;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));Wait=.5f;break;
+        Right(0);BallControlOff();ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;DemoShotTargetX=500.f;DemoShots=0;DemoWasPending=false;PreviousDemoPhase=0;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));Wait=.5f;break;
     case 59:
         SettingsPlayerBefore=Avatar->GetActorLocation();SettingsBallBefore=Mode->Ball->GetComponentLocation();Saved->PauseInSettings=false;SettingsReturn=EScreen::Main;ChangeScreen(EScreen::Settings);Check(TEXT("pause_in_settings_off_is_live"),!IsPaused());Wait=3.f;break;
     case 60:
@@ -271,6 +417,431 @@ void AFootballController::RunChecks()
         Saved->Language=1;Check(TEXT("language_polish_text"),Localize(TEXT("Settings"),TEXT("Ustawienia"))==TEXT("Ustawienia"));UGameplayStatics::SaveGameToSlot(Saved,TEXT("ErlingProfile_Test"),0);
         {auto Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("language_persistence"),Loaded&&Loaded->Language==1);}
         Saved->Language=0;UGameplayStatics::SaveGameToSlot(Saved,TEXT("ErlingProfile_Test"),0);ResetPlayer();Wait=.1f;break;
+    case 63:
+        ChangeScreen(EScreen::Game);ResetPlayer();Saved->CameraMode=0;Yaw=0;MoveForward=0;MoveRight=0;PlaceBall();
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}
+        Forward(1);Wait=.35f;break;
+    case 64:
+        Forward(-1);Wait=.45f;break;
+    case 65:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());const float Distance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        UE_LOG(LogTemp,Display,TEXT("POSSESSION_REVERSE_RUN distance=%f yaw=%f skid=%f"),Distance,Avatar->GetActorRotation().Yaw,Move->TurnSkidRemaining);
+        Check(TEXT("run_reverse_keeps_dribble_control"),Distance<205.f&&Mode->HasDribbleControl(Avatar));Check(TEXT("run_reverse_suppresses_off_ball_skid"),Move->TurnSkidRemaining<=KINDA_SMALL_NUMBER);Check(TEXT("run_reverse_turns_player_with_ball"),Avatar->GetActorForwardVector().X<-.45f);}
+        Forward(0);ResetPlayer();PlaceBall();SprintOn();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(1);Wait=.45f;break;
+    case 66:
+        Forward(-1);Wait=.5f;break;
+    case 67:
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());const float Distance=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        UE_LOG(LogTemp,Display,TEXT("POSSESSION_REVERSE_SPRINT distance=%f yaw=%f skid=%f"),Distance,Avatar->GetActorRotation().Yaw,Move->TurnSkidRemaining);
+        Check(TEXT("sprint_reverse_keeps_ball_recoverable"),Distance<230.f&&Mode->HasDribbleControl(Avatar));Check(TEXT("sprint_reverse_uses_controlled_cut"),Move->TurnSkidRemaining<=KINDA_SMALL_NUMBER);}
+        Forward(0);SprintOff();ResetPlayer();PlaceBall();SprintOn();Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}
+        Mode->DribbleDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now+.3f;Mode->Ball->SetPhysicsLinearVelocity(FVector(1000,0,0));Right(1);Wait=.12f;break;
+    case 68:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const FVector Heading=V.GetSafeNormal2D();const float YawAbs=FMath::Abs(FMath::FindDeltaAngleDegrees(0.f,Avatar->GetActorRotation().Yaw));
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_RELEASE_TURN ball_velocity=%s actor_yaw=%f dribble_yaw=%f"),*V.ToString(),Avatar->GetActorRotation().Yaw,Mode->DribbleDirection.Rotation().Yaw);
+        Check(TEXT("sprint_release_heading_ignores_new_input"),FVector::DotProduct(Heading,Mode->SprintReleaseDirection.GetSafeNormal2D())>.995f&&FMath::Abs(V.Y)<35.f);
+        Check(TEXT("sprint_release_does_not_turn_runner_before_contact"),YawAbs<5.f);}
+        Right(0);SprintOff();Mode->SprintReleaseUntil=0;ResetPlayer();MoveForward=1;MoveRight=1;TestDigitalMoveIntent=true;Avatar->SetActorRotation(FRotator::ZeroRotator);PlaceBall();FireShot(.5f);
+        Check(TEXT("digital_diagonal_shot_is_assisted_on_target"),PendingShot&&PendingHasAim&&FMath::Abs(PendingAimTarget.Y)<319.f);
+        Check(TEXT("digital_diagonal_shot_can_select_goal_corner"),FMath::Abs(PendingAimTarget.Y)>220.f);
+        TestDigitalMoveIntent=false;ResetPlayer();Avatar->SetActorRotation(FRotator(0,20,0));PlaceBall();MoveForward=1;MoveRight=0;FireShot(.5f);
+        Check(TEXT("full_stick_analog_shot_remains_unassisted"),PendingShot&&PendingHasAim&&FMath::Abs(PendingAimTarget.Y)>319.f);
+        MoveForward=0;MoveRight=0;ResetPlayer();PlaceBall();Avatar->BallTrapCount=0;Mode->LastPossessionDirection=FVector(1,0,0);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(1);Wait=.35f;break;
+    case 69:
+        Forward(0);Wait=.72f;break;
+    case 70:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());const FVector Rel=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();const float Ahead=FVector::DotProduct(Rel.GetSafeNormal2D(),Mode->LastPossessionDirection.GetSafeNormal2D())*Rel.Size2D();
+        UE_LOG(LogTemp,Display,TEXT("BALL_TRAP stopped=%d velocity=%s distance=%f ahead=%f traps=%d"),Mode->BallStopped?1:0,*V.ToString(),D,Ahead,Avatar->BallTrapCount);
+        Check(TEXT("releasing_move_traps_ball"),Mode->BallStopped&&Avatar->BallTrapCount>0);
+        Check(TEXT("trapped_ball_is_stationary"),V.Size2D()<3.f);
+        Check(TEXT("trapped_ball_stays_in_front_of_body"),Ahead>34.f&&D<105.f);}
+        HeldBallPosition=Mode->Ball->GetComponentLocation();Wait=.4f;break;
+    case 71:
+        Check(TEXT("trapped_ball_does_not_roll_away"),FVector::Dist2D(HeldBallPosition,Mode->Ball->GetComponentLocation())<2.f&&Mode->Ball->GetPhysicsLinearVelocity().Size2D()<3.f);
+        Avatar->SetActorRotation(FRotator(0,90,0));FireShot(.5f);
+        {const FVector Remembered=Mode->LastPossessionDirection.GetSafeNormal2D();Check(TEXT("stopped_shot_uses_last_possession_direction"),PendingShot&&FVector::DotProduct(PendingVelocity.GetSafeNormal2D(),Remembered)>.94f);}
+        ResetPlayer();PlaceBall();Mode->DribbleDirection=FVector(1,0,0);Mode->LastPossessionDirection=FVector(1,0,0);Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(8,0,-76),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(160,0,0));Forward(1);Wait=.12f;break;
+    case 72:
+        {const FVector Rel=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();const float Ahead=FVector::DotProduct(Rel,Mode->DribbleDirection.GetSafeNormal2D());
+        UE_LOG(LogTemp,Display,TEXT("BODY_CORRIDOR ball_rel=%s ahead=%f"),*Rel.ToString(),Ahead);Check(TEXT("controlled_ball_cannot_sit_under_player"),Ahead>=34.f);}
+        Forward(0);ResetPlayer();PlaceBall();SprintOn();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(1);Wait=.45f;break;
+    case 73:
+        Forward(0);Wait=1.3f;break;
+    case 74:
+        {const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());UE_LOG(LogTemp,Display,TEXT("SPRINT_STOP_FINAL distance=%f ball_v=%s player_v=%s pending=%d stopped=%d release_dir=%s age=%f"),D,*Mode->Ball->GetPhysicsLinearVelocity().ToString(),*Avatar->GetVelocity().ToString(),Mode->BallStopRequested?1:0,Mode->BallStopped?1:0,*Mode->SprintReleaseDirection.ToString(),Now-Mode->BallStopStarted);Check(TEXT("sprint_release_stop_recovers_ball"),Mode->BallStopped&&D<120.f);Check(TEXT("sprint_stop_ball_is_stationary"),Mode->Ball->GetPhysicsLinearVelocity().Size2D()<3.f);}
+        SprintOff();ResetPlayer();PlaceBall();Mode->HadControlInput=true;Mode->DribbleDirection=FVector(1,0,0);Mode->LastPossessionDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now+.18f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);}
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(130,0,-76),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));MoveForward=0;MoveRight=0;Wait=.07f;break;
+    case 75:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        UE_LOG(LogTemp,Display,TEXT("PENDING_STOP_RELEASE distance=%f velocity=%s pending=%d stopped=%d"),D,*V.ToString(),Mode->BallStopRequested?1:0,Mode->BallStopped?1:0);
+        Check(TEXT("stop_request_does_not_recall_active_sprint_release"),Mode->BallStopRequested&&!Mode->BallStopped&&Mode->SprintReleaseUntil>Now&&FVector::DotProduct(V.GetSafeNormal2D(),Mode->SprintReleaseDirection.GetSafeNormal2D())>.995f&&FMath::Abs(V.Y)<25.f);}
+        Wait=1.05f;break;
+    case 76:
+        {const float D=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());UE_LOG(LogTemp,Display,TEXT("PENDING_STOP_FINAL distance=%f ball_v=%s player_v=%s pending=%d stopped=%d release_until_delta=%f release_dir=%s age=%f"),D,*Mode->Ball->GetPhysicsLinearVelocity().ToString(),*Avatar->GetVelocity().ToString(),Mode->BallStopRequested?1:0,Mode->BallStopped?1:0,Mode->SprintReleaseUntil-Now,*Mode->SprintReleaseDirection.ToString(),Now-Mode->BallStopStarted);Check(TEXT("pending_stop_traps_after_release_reacquire"),Mode->BallStopped&&D<120.f&&Mode->Ball->GetPhysicsLinearVelocity().Size2D()<3.f);}
+        SprintOff();Forward(0);Right(0);ResetPlayer();PlaceBall();Mode->DribbleMinDirectionAhead=MAX_flt;Mode->DribbleMinBodyAhead=MAX_flt;Mode->CarryFootSwitchCount=0;
+        VideoTurnMinDirectionAhead=MAX_flt;VideoTurnMinBodyAhead=MAX_flt;VideoTurnMaxGap=0.f;VideoTurnSamples=0;Forward(1);Wait=.4f;break;
+    case 77:
+        Forward(0);Right(1);Wait=.45f;break;
+    case 78:
+        Right(0);Forward(-1);Wait=.45f;break;
+    case 79:
+        {const float FinalGap=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        UE_LOG(LogTemp,Display,TEXT("VIDEO_TURN_REGRESSION samples=%d min_dribble_ahead=%f min_body_ahead=%f max_gap=%f final_gap=%f foot_switches=%d"),VideoTurnSamples,VideoTurnMinDirectionAhead,VideoTurnMinBodyAhead,VideoTurnMaxGap,FinalGap,Mode->CarryFootSwitchCount);
+        Check(TEXT("run_turn_ball_stays_ahead_of_dribble_heading"),VideoTurnSamples>20&&VideoTurnMinDirectionAhead>=8.f);
+        Check(TEXT("run_turn_ball_never_lags_behind_body"),VideoTurnSamples>20&&VideoTurnMinBodyAhead>=0.f);
+        Check(TEXT("run_turn_ball_never_needs_large_catch_up"),VideoTurnSamples>20&&VideoTurnMaxGap<125.f&&FinalGap<105.f);
+        Check(TEXT("carry_foot_does_not_ping_pong_during_turn"),Mode->CarryFootSwitchCount<=4);}
+        Forward(0);Right(0);Wait=.1f;break;
+    case 80:
+        ResetPlayer();PlaceBall();SprintOn();SprintStressMinBodyAhead=MAX_flt;SprintStressMaxGap=0.f;SprintStressSamples=0;SprintStressLostControlFrames=0;
+        Forward(1);Wait=.45f;break;
+    case 81:Forward(0);Right(1);Wait=.16f;break;
+    case 82:Right(0);Forward(-1);Wait=.16f;break;
+    case 83:Forward(0);Right(-1);Wait=.16f;break;
+    case 84:Right(0);Forward(1);Wait=.16f;break;
+    case 85:Forward(0);Right(1);Wait=.16f;break;
+    case 86:Right(0);Forward(-1);Wait=.16f;break;
+    case 87:Forward(0);Right(-1);Wait=.16f;break;
+    case 88:
+        {const float FinalGap=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_STRESS samples=%d lost_frames=%d min_body_ahead=%f max_gap=%f final_gap=%f"),SprintStressSamples,SprintStressLostControlFrames,SprintStressMinBodyAhead,SprintStressMaxGap,FinalGap);
+        Check(TEXT("sprint_rapid_turns_keep_ball_recoverable"),SprintStressSamples>50&&SprintStressLostControlFrames==0&&SprintStressMaxGap<250.f);
+        Check(TEXT("sprint_rapid_turns_do_not_hide_ball_far_behind_body"),SprintStressSamples>50&&SprintStressMinBodyAhead>-70.f);
+        Check(TEXT("sprint_rapid_turns_finish_with_ball_nearby"),FinalGap<180.f);}
+        Forward(0);Right(0);SprintOff();Wait=.1f;break;
+    case 89:
+        ResetPlayer();PlaceBall();SprintOn();Mode->SprintDribbleTouchCount=0;Mode->DribbleDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now+.3f;Mode->SprintNextTouchAt=0.f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;
+        Mode->Ball->SetWorldLocation(FVector(Foot.X+45.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));}
+        Forward(-1);Wait=.14f;break;
+    case 90:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const FVector Released=Mode->SprintReleaseDirection.GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_CLOSE_TURN touch_count=%d release_dir=%s ball_v=%s release_delta=%f"),Mode->SprintDribbleTouchCount,*Released.ToString(),*V.ToString(),Mode->SprintReleaseUntil-Now);
+        Check(TEXT("close_sprint_turn_reacquires_with_real_foot_contact"),Mode->SprintDribbleTouchCount>0&&FVector::DotProduct(Released,FVector::ForwardVector)<.995f);
+        Check(TEXT("close_sprint_turn_releases_along_new_heading"),!Released.IsNearlyZero()&&FVector::DotProduct(V.GetSafeNormal2D(),Released)>.9f);}
+        Forward(0);SprintOff();Wait=.1f;break;
+    case 91:
+        ResetPlayer();PlaceBall();SprintOn();Mode->SprintDribbleTouchCount=0;Mode->DribbleDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now+.3f;Mode->SprintNextTouchAt=0.f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;
+        Mode->Ball->SetWorldLocation(FVector(Foot.X+68.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));}
+        Forward(-1);Wait=.08f;break;
+    case 92:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const FVector Released=Mode->SprintReleaseDirection.GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_FALSE_RECONTACT touch_count=%d release_dir=%s ball_v=%s release_delta=%f"),Mode->SprintDribbleTouchCount,*Released.ToString(),*V.ToString(),Mode->SprintReleaseUntil-Now);
+        Check(TEXT("sprint_release_does_not_recontact_from_remote_foot_distance"),Mode->SprintDribbleTouchCount==0&&Mode->SprintReleaseUntil>Now&&FVector::DotProduct(Released,FVector::ForwardVector)>.995f&&FVector::DotProduct(V.GetSafeNormal2D(),Released)>.995f);}
+        Forward(0);SprintOff();Wait=.1f;break;
+    case 93:
+        ResetPlayer();PlaceBall();SprintOn();Mode->SprintDribbleTouchCount=0;Mode->DribbleDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now-.01f;Mode->SprintNextTouchAt=Now+1.f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(160,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(850,0,0));}
+        Right(1);Wait=.08f;break;
+    case 94:
+        {const FVector V=Mode->Ball->GetPhysicsLinearVelocity();const FVector Released=Mode->SprintReleaseDirection.GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_FAR_POST_RELEASE touch_count=%d release_dir=%s ball_v=%s gap=%f"),Mode->SprintDribbleTouchCount,*Released.ToString(),*V.ToString(),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation()));
+        Check(TEXT("far_sprint_ball_stays_free_until_real_reacquire"),Mode->SprintDribbleTouchCount==0&&FVector::DotProduct(V.GetSafeNormal2D(),Released)>.995f&&FMath::Abs(V.Y)<25.f);}
+        Right(0);SprintOff();Wait=.1f;break;
+    case 95:
+        ResetPlayer();PlaceBall();SprintOn();Mode->SprintDribbleFoot=TEXT("foot_l");Mode->SprintLeadFoot=TEXT("foot_l");Mode->SprintContactUntil=Now+.2f;Mode->SprintReleaseUntil=Now+.3f;Mode->SprintNextTouchAt=Now+.2f;Mode->SprintKickPending=true;Mode->SprintReleaseDirection=FVector(1,0,0);
+        {const bool Launched=Mode->LaunchShot(Avatar,FVector(1700,300,200));Check(TEXT("shot_launches_from_sprint_state"),Launched);
+        Check(TEXT("shot_clears_stale_sprint_recovery_state"),Launched&&Mode->SprintReleaseDirection.IsNearlyZero()&&Mode->SprintReleaseUntil==0.f&&Mode->SprintContactUntil==0.f&&!Mode->SprintKickPending&&Mode->SprintDribbleFoot==NAME_None&&Mode->SprintLeadFoot==NAME_None);}
+        SprintOff();Wait=.1f;break;
+    case 96:
+        ResetPlayer();Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);MoveForward=0;MoveRight=0;
+        {const FVector Start=Avatar->GetActorLocation()+Avatar->GetActorForwardVector()*132.f+Avatar->GetActorRightVector()*48.f-FVector(0,0,76.f);
+        Mode->Ball->SetWorldLocation(Start,false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);ShotWindupStart=Start;ShotWindupMaxDisplacement=0.f;ShotWindupSamples=0;FireShot(.5f);
+        Check(TEXT("shot_windup_started_from_offset_live_ball"),PendingShot);}
+        Wait=FMath::Clamp(ShotContactTime*.45f,.02f,.06f);break;
+    case 97:
+        UE_LOG(LogTemp,Display,TEXT("SHOT_WINDUP_CONTINUITY samples=%d displacement=%f pending=%d contact_time=%f"),ShotWindupSamples,ShotWindupMaxDisplacement,PendingShot?1:0,ShotContactTime);
+        Check(TEXT("shot_windup_does_not_teleport_ball_to_contact_marker"),ShotWindupSamples>0&&ShotWindupMaxDisplacement<24.f);
+        Wait=.5f;break;
+    case 98:
+        Check(TEXT("physical_windup_still_launches_shot"),Mode->ShotInFlight&&!PendingShot&&Mode->Ball->GetPhysicsLinearVelocity().Size()>500.f);
+        Wait=.1f;break;
+    case 99:
+        ResetPlayer();Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);MoveForward=0;MoveRight=0;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(195,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(1050,0,0));
+        FireShot(.5f);Check(TEXT("moving_outer_possession_shot_commits"),PendingShot);}
+        Wait=.68f;break;
+    case 100:
+        {const float Gap=FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation());UE_LOG(LogTemp,Display,TEXT("COMMITTED_MOVING_SHOT gap=%f shot_in_flight=%d pending=%d ball_v=%s"),Gap,Mode->ShotInFlight?1:0,PendingShot?1:0,*Mode->Ball->GetPhysicsLinearVelocity().ToString());
+        Check(TEXT("committed_moving_shot_launches_without_reacquire_teleport"),Mode->ShotInFlight&&!PendingShot&&Mode->Ball->GetPhysicsLinearVelocity().Size()>500.f);}
+        Wait=.1f;break;
+    case 101:
+        ResetPlayer();PlaceBall();SprintOn();Mode->SprintDribbleTouchCount=0;Mode->DribbleDirection=FVector(1,0,0);Mode->SprintReleaseDirection=FVector(1,0,0);Mode->SprintReleaseUntil=Now+.35f;Mode->SprintNextTouchAt=Now+1.f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;
+        SprintChaseMaxYawStep=0.f;SprintChasePreviousYaw=Avatar->GetActorRotation().Yaw;SprintChaseYawSamples=0;SprintChaseYawPrimed=false;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(175,85,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(860,0,0));}
+        Right(-1);Wait=.12f;break;
+    case 102:
+        {FVector Gap=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();Gap.Z=0;const FVector Chase=Gap.GetSafeNormal2D();const FVector Vel=Avatar->GetVelocity().GetSafeNormal2D();const FVector Facing=Avatar->GetActorForwardVector().GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_CHASE_LOCK gap=%f chase=%s velocity=%s facing=%s input=%s pending=%d"),Gap.Size2D(),*Chase.ToString(),*Vel.ToString(),*Facing.ToString(),*GetMoveIntentWorld().ToString(),Mode->SprintKickPending?1:0);
+        Check(TEXT("sprint_release_chase_ignores_steering_until_contact"),!Mode->SprintKickPending&&FVector::DotProduct(Vel,Chase)>.985f);
+        Check(TEXT("sprint_release_chase_faces_ball"),FVector::DotProduct(Facing,Chase)>.96f);
+        Check(TEXT("sprint_release_chase_rotation_is_smooth"),SprintChaseYawSamples>=4&&SprintChaseMaxYawStep<7.f);
+        UE_LOG(LogTemp,Display,TEXT("SPRINT_CHASE_SMOOTH samples=%d max_yaw_step=%f"),SprintChaseYawSamples,SprintChaseMaxYawStep);}
+        Right(0);SprintOff();Wait=.1f;break;
+    case 103:
+        ResetPlayer();PlaceBall();MoveForward=0;MoveRight=0;FireShot(.5f);
+        Check(TEXT("missed_contact_shot_commits_before_ball_is_taken"),PendingShot);
+        if(PendingShot)
+        {
+            const float BallZ=Mode->Ball->GetComponentLocation().Z;
+            Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(900,500,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);
+            Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        }
+        Wait=.72f;break;
+    case 104:
+        UE_LOG(LogTemp,Display,TEXT("SHOT_CANCEL_RECOVERY pending=%d in_flight=%d damping=%f gap=%f"),PendingShot?1:0,Mode->ShotInFlight?1:0,Mode->Ball->GetLinearDamping(),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation()));
+        Check(TEXT("missed_physical_shot_cancels_without_remote_launch"),!PendingShot&&!Mode->ShotInFlight);
+        Check(TEXT("missed_physical_shot_restores_free_ball_damping"),FMath::IsNearlyEqual(Mode->Ball->GetLinearDamping(),.3f,.02f));
+        Wait=.1f;break;
+    case 105:
+        ResetPlayer();Mode->ResetBall();MoveForward=0;MoveRight=0;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=90.f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector::ZeroVector;Move->LastMoveInputDirection=FVector::ZeroVector;Move->TurnSkidRemaining=0;
+        const FVector HoldWorld=Avatar->GetActorLocation()+FVector(56.f,14.f,-78.f);
+        Mode->Ball->SetWorldLocation(HoldWorld,false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);Mode->Ball->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+        Mode->BallStopped=true;Mode->BallStopRequested=false;Mode->BallStopGesturePlayed=true;Mode->BallStopFoot=TEXT("foot_r");Mode->PossessionActive=true;Mode->HadControlInput=false;Mode->DribbleDirection=FVector::ForwardVector;Mode->LastPossessionDirection=FVector::ForwardVector;
+        Mode->BallStopAnchor=Avatar->GetActorTransform().InverseTransformPosition(HoldWorld);PivotExpectedLocal=Mode->BallStopAnchor;PivotMaxLocalDrift=0.f;PivotSamples=0;
+        Avatar->BeginTurn(90.f);}
+        Wait=.65f;break;
+    case 106:
+        {FVector Rel=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();Rel.Z=0.f;const float Ahead=FVector::DotProduct(Rel,Avatar->GetActorForwardVector().GetSafeNormal2D());
+        UE_LOG(LogTemp,Display,TEXT("PIVOT_BALL_HOLD samples=%d local_drift=%f ahead=%f gap=%f yaw=%f"),PivotSamples,PivotMaxLocalDrift,Ahead,Rel.Size2D(),Avatar->GetActorRotation().Yaw);
+        Check(TEXT("stopped_ball_rotates_with_player_in_place"),PivotSamples>20&&PivotMaxLocalDrift<3.f&&Ahead>35.f);
+        Check(TEXT("pivot_preserves_stationary_shot_direction_memory"),FVector::DotProduct(Mode->LastPossessionDirection.GetSafeNormal2D(),FVector::ForwardVector)>.98f);
+        Check(TEXT("pivot_syncs_dribble_heading_to_body"),FVector::DotProduct(Mode->DribbleDirection.GetSafeNormal2D(),Avatar->GetActorForwardVector().GetSafeNormal2D())>.98f);}
+        Forward(1);Wait=.12f;break;
+    case 107:
+        {FVector Rel=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();Rel.Z=0.f;const float Ahead=FVector::DotProduct(Rel,Avatar->GetActorForwardVector().GetSafeNormal2D());
+        UE_LOG(LogTemp,Display,TEXT("PIVOT_MOVE_RESUME ahead=%f gap=%f ball_v=%s"),Ahead,Rel.Size2D(),*Mode->Ball->GetPhysicsLinearVelocity().ToString());
+        Check(TEXT("moving_after_pivot_does_not_snap_ball_from_behind"),Ahead>8.f&&Rel.Size2D()<125.f);}
+        Forward(0);Yaw=0.f;Wait=.1f;break;
+    case 108:
+        ResetPlayer();Mode->ResetBall();MoveForward=0;MoveRight=0;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(125,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        StartCharge();Check(TEXT("shot_charge_arms_while_in_possession"),Charging&&ShotChargeArmed);
+        ChargeStarted=Now-.72f;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.25f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(260,35,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(820,0,0));ReleaseCharge();}
+        Check(TEXT("shot_release_buffers_when_sprint_touch_is_temporarily_loose"),!Charging&&ShotBufferActive&&!PendingShot&&ShotBufferSeconds>.65f&&ShotBufferSeconds<.8f);
+        Wait=.2f;break;
+    case 109:
+        Check(TEXT("buffered_shot_survives_without_immediate_recontact"),ShotBufferActive&&!PendingShot&&!Mode->ShotInFlight);
+        SprintOff();Avatar->GetCharacterMovement()->StopMovementImmediately();
+        {const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"));const float BallZ=Mode->Ball->GetComponentLocation().Z;
+        Mode->Ball->SetWorldLocation(FVector(Foot.X+42.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);}
+        Wait=.08f;break;
+    case 110:
+        Check(TEXT("buffered_shot_commits_at_next_real_foot_contact"),!ShotBufferActive&&PendingShot&&Avatar->Action==AFootballPlayer::EAction::Kick);
+        Wait=.7f;break;
+    case 111:
+        Check(TEXT("buffered_shot_eventually_launches"),Mode->ShotInFlight&&!PendingShot&&Mode->Ball->GetPhysicsLinearVelocity().Size()>500.f);
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(125,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);StartCharge();ChargeStarted=Now-.5f;
+        Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.2f;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(310,120,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);ReleaseCharge();SprintOff();}
+        Check(TEXT("shot_timeout_scenario_starts_buffered"),ShotBufferActive);Wait=ShotBufferWindow+.12f;break;
+    case 112:
+        UE_LOG(LogTemp,Display,TEXT("SHOT_BUFFER_TIMEOUT active=%d pending=%d in_flight=%d age=%f window=%f"),ShotBufferActive?1:0,PendingShot?1:0,Mode->ShotInFlight?1:0,Now-ShotBufferStarted,ShotBufferWindow);
+        Check(TEXT("buffered_shot_expires_without_contact"),!ShotBufferActive&&!PendingShot&&!Mode->ShotInFlight);
+        Wait=.1f;break;
+    case 113:
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.12f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(300,25,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(760,0,0));StartCharge();}
+        Check(TEXT("shot_charge_can_arm_during_recent_recoverable_sprint_touch"),Charging&&ShotChargeArmed);Charging=false;ShotChargeArmed=false;Wait=.1f;break;
+    case 114:
+        Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now-2.f;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(300,25,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);StartCharge();}
+        Check(TEXT("shot_charge_does_not_arm_from_stale_sprint_release_state"),!Charging&&!ShotChargeArmed);SprintOff();Wait=.1f;break;
+    case 115:
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.22f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(285,95,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(820,0,0));StartCharge();}
+        Check(TEXT("charging_arms_on_recoverable_sprint_touch"),Charging&&ShotChargeArmed&&Mode->IsRecoverableSprintTouch(Avatar));
+        Right(-1);Wait=.12f;break;
+    case 116:
+        {FVector Gap=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();Gap.Z=0.f;const FVector Chase=Gap.GetSafeNormal2D();const FVector Velocity=Avatar->GetVelocity().GetSafeNormal2D();const FVector Facing=Avatar->GetActorForwardVector().GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("CHARGING_SPRINT_CHASE gap=%f chase=%s velocity=%s facing=%s charging=%d"),Gap.Size2D(),*Chase.ToString(),*Velocity.ToString(),*Facing.ToString(),Charging?1:0);
+        Check(TEXT("charging_preserves_sprint_release_chase"),Charging&&FVector::DotProduct(Velocity,Chase)>.985f);
+        Check(TEXT("charging_preserves_sprint_release_facing"),Charging&&FVector::DotProduct(Facing,Chase)>.95f);}
+        Right(0);Charging=false;ShotChargeArmed=false;SprintOff();Wait=.1f;break;
+    case 117:
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now-1.5f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(300,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Dribble(Avatar,.016f);}
+        Check(TEXT("expired_sprint_release_state_is_cleared"),Mode->SprintReleaseDirection.IsNearlyZero()&&Mode->SprintReleaseUntil==0.f&&Mode->SprintContactUntil==0.f&&!Mode->SprintKickPending);
+        Wait=.1f;break;
+    case 118:
+        Mode->ResetBall();Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.2f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+1.f;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(460,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Dribble(Avatar,.016f);}
+        Check(TEXT("hard_lost_sprint_release_state_is_cleared"),Mode->SprintReleaseDirection.IsNearlyZero()&&Mode->SprintReleaseUntil==0.f&&Mode->SprintContactUntil==0.f&&!Mode->SprintKickPending);
+        SprintOff();Wait=.1f;break;
+    case 119:
+        ResetPlayer();Mode->ResetBall();SprintOn();MoveForward=0;MoveRight=0;TestDigitalMoveIntent=false;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.22f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(285,95,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(820,0,0));StartCharge();}
+        Check(TEXT("analog_charge_caches_pre_chase_shot_aim"),Charging&&FVector::DotProduct(ShotChargeAimDirection,FVector::ForwardVector)>.995f);
+        Right(-1);Wait=.12f;break;
+    case 120:
+        {const float FacingYaw=Avatar->GetActorRotation().Yaw;ReleaseCharge();
+        Check(TEXT("analog_charge_can_face_ball_without_overwriting_aim"),ShotBufferActive&&FMath::Abs(FacingYaw)>2.f&&FVector::DotProduct(ShotBufferAimDirection,FVector::ForwardVector)>.995f);
+        Right(0);SprintOff();Avatar->GetCharacterMovement()->StopMovementImmediately();
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"));const float BallZ=Mode->Ball->GetComponentLocation().Z;
+        Mode->Ball->SetWorldLocation(FVector(Foot.X+42.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);}
+        Wait=.08f;break;
+    case 121:
+        {const FVector ShotHeading=PendingVelocity.GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("BUFFERED_ANALOG_AIM actor_yaw=%f cached=%s shot=%s"),Avatar->GetActorRotation().Yaw,*ShotBufferAimDirection.ToString(),*ShotHeading.ToString());
+        Check(TEXT("buffered_analog_shot_preserves_pre_chase_aim"),PendingShot&&FVector::DotProduct(ShotHeading,FVector::ForwardVector)>.98f);}
+        Wait=.7f;break;
+    case 122:
+        Check(TEXT("buffered_analog_shot_launches_after_preserved_aim"),Mode->ShotInFlight&&!PendingShot);
+        TestDigitalMoveIntent=false;Wait=.1f;break;
+    case 123:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.28f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(190,20,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(830,0,0));StartCharge();}
+        Check(TEXT("torture_180_charge_arms_during_release"),Charging&&ShotChargeArmed);Forward(-1);Wait=.22f;break;
+    case 124:
+        {FVector Gap=Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation();Gap.Z=0.f;const FVector Chase=Gap.GetSafeNormal2D();const FVector Vel=Avatar->GetVelocity().GetSafeNormal2D();const FVector Facing=Avatar->GetActorForwardVector().GetSafeNormal2D();const FVector BallHeading=Mode->Ball->GetPhysicsLinearVelocity().GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("TORTURE_180_CHARGE gap=%f chase_dot=%f facing_dot=%f ball=%s cached=%s"),Gap.Size2D(),FVector::DotProduct(Vel,Chase),FVector::DotProduct(Facing,Chase),*BallHeading.ToString(),*ShotChargeAimDirection.ToString());
+        Check(TEXT("torture_180_charge_keeps_runner_on_ball"),Charging&&Gap.Size2D()<420.f&&FVector::DotProduct(Vel,Chase)>.98f&&FVector::DotProduct(Facing,Chase)>.93f);
+        Check(TEXT("torture_180_charge_does_not_steer_free_ball"),FVector::DotProduct(BallHeading,FVector::ForwardVector)>.995f&&FMath::Abs(Mode->Ball->GetPhysicsLinearVelocity().Y)<25.f);
+        Check(TEXT("torture_180_charge_preserves_pre_turn_aim"),FVector::DotProduct(ShotChargeAimDirection,FVector::ForwardVector)>.995f);
+        ReleaseCharge();Forward(0);
+        Check(TEXT("torture_180_release_keeps_shot_command"),PendingShot||ShotBufferActive);
+        if(ShotBufferActive)PutBallAtNearestFoot();}
+        Wait=.08f;break;
+    case 125:
+        Check(TEXT("torture_180_shot_commits_on_recontact"),PendingShot||Mode->ShotInFlight);
+        Wait=.75f;break;
+    case 126:
+        Check(TEXT("torture_180_shot_launches_once_and_clears_recovery"),Mode->ShotInFlight&&!PendingShot&&Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending&&Mode->SprintContactUntil==0.f);
+        SprintOff();Forward(0);Wait=.1f;break;
+    case 127:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;TestDigitalMoveIntent=false;Avatar->SetActorRotation(FRotator(0,30,0));
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.3f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(280,-90,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(820,0,0));StartCharge();}
+        Check(TEXT("angled_release_shot_caches_analog_aim"),Charging&&FMath::Abs(ShotChargeAimDirection.Rotation().Yaw-30.f)<1.f);Right(-1);Wait=.18f;break;
+    case 128:
+        {const FVector BallHeading=Mode->Ball->GetPhysicsLinearVelocity().GetSafeNormal2D();const float FacingYaw=Avatar->GetActorRotation().Yaw;const FVector CachedAim=ShotChargeAimDirection;
+        UE_LOG(LogTemp,Display,TEXT("TORTURE_ANGLED_RELEASE facing_yaw=%f cached_yaw=%f ball=%s"),FacingYaw,CachedAim.Rotation().Yaw,*BallHeading.ToString());
+        Check(TEXT("angled_release_charge_keeps_ball_ballistic"),FVector::DotProduct(BallHeading,FVector::ForwardVector)>.995f&&FMath::Abs(Mode->Ball->GetPhysicsLinearVelocity().Y)<25.f);
+        Check(TEXT("angled_release_chase_can_rotate_body_without_aim_drift"),FMath::Abs(FMath::FindDeltaAngleDegrees(30.f,FacingYaw))>4.f&&FMath::Abs(FMath::FindDeltaAngleDegrees(30.f,CachedAim.Rotation().Yaw))<1.f);
+        ReleaseCharge();Right(0);Check(TEXT("angled_release_shot_buffers_until_contact"),ShotBufferActive&&!PendingShot);
+        PutBallAtNearestFoot();}
+        Wait=.08f;break;
+    case 129:
+        {const float Error=FMath::Abs(FMath::FindDeltaAngleDegrees(30.f,PendingVelocity.GetSafeNormal2D().Rotation().Yaw));
+        UE_LOG(LogTemp,Display,TEXT("TORTURE_ANGLED_SHOT pending=%d yaw=%f error=%f"),PendingShot?1:0,PendingVelocity.GetSafeNormal2D().Rotation().Yaw,Error);
+        Check(TEXT("angled_sprint_release_shot_preserves_cached_heading"),PendingShot&&Error<2.5f);}
+        Wait=.75f;break;
+    case 130:
+        Check(TEXT("angled_sprint_release_shot_launches"),Mode->ShotInFlight&&!PendingShot);
+        SprintOff();TestDigitalMoveIntent=false;Wait=.1f;break;
+    case 131:
+        BeginLooseBufferedShot(.55f,FVector(320,35,0));Check(TEXT("buffer_050_starts"),ShotBufferActive);Wait=.5f;break;
+    case 132:
+        {const float Age=Now-ShotBufferStarted;UE_LOG(LogTemp,Display,TEXT("BUFFER_REACQUIRE_050 age=%f active=%d"),Age,ShotBufferActive?1:0);Check(TEXT("buffer_survives_050_before_contact"),ShotBufferActive&&!PendingShot&&Age>.45f&&Age<.7f);PutBallAtNearestFoot();}Wait=.08f;break;
+    case 133:
+        Check(TEXT("buffer_commits_after_050_recontact"),!ShotBufferActive&&PendingShot);Wait=.75f;break;
+    case 134:
+        Check(TEXT("buffer_050_launches"),Mode->ShotInFlight&&!PendingShot);Wait=.1f;break;
+    case 135:
+        BeginLooseBufferedShot(.7f,FVector(330,-40,0));Check(TEXT("buffer_100_starts"),ShotBufferActive);Wait=1.f;break;
+    case 136:
+        {const float Age=Now-ShotBufferStarted;UE_LOG(LogTemp,Display,TEXT("BUFFER_REACQUIRE_100 age=%f active=%d"),Age,ShotBufferActive?1:0);Check(TEXT("buffer_survives_100_before_contact"),ShotBufferActive&&!PendingShot&&Age>.9f&&Age<1.15f);PutBallAtNearestFoot();}Wait=.08f;break;
+    case 137:
+        Check(TEXT("buffer_commits_after_100_recontact"),!ShotBufferActive&&PendingShot);Wait=.75f;break;
+    case 138:
+        Check(TEXT("buffer_100_launches"),Mode->ShotInFlight&&!PendingShot);Wait=.1f;break;
+    case 139:
+        BeginLooseBufferedShot(.85f,FVector(340,45,0));Check(TEXT("buffer_130_starts"),ShotBufferActive);Wait=1.3f;break;
+    case 140:
+        {const float Age=Now-ShotBufferStarted;UE_LOG(LogTemp,Display,TEXT("BUFFER_REACQUIRE_130 age=%f active=%d"),Age,ShotBufferActive?1:0);Check(TEXT("buffer_survives_130_before_contact"),ShotBufferActive&&!PendingShot&&Age>1.2f&&Age<1.39f);PutBallAtNearestFoot();}Wait=.08f;break;
+    case 141:
+        Check(TEXT("buffer_commits_after_130_recontact"),!ShotBufferActive&&PendingShot);Wait=.75f;break;
+    case 142:
+        Check(TEXT("buffer_130_launches"),Mode->ShotInFlight&&!PendingShot);Wait=.1f;break;
+    case 143:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->SprintDribbleTouchCount=0;Mode->DribbleDirection=FVector::ForwardVector;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.3f;Mode->SprintNextTouchAt=0.f;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(FVector(Foot.X+45.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));StartCharge();}
+        Check(TEXT("rapid_touch_shot_charge_starts_before_recontact"),Charging);Forward(-1);Wait=.14f;break;
+    case 144:
+        {const int32 Touches=Mode->SprintDribbleTouchCount;UE_LOG(LogTemp,Display,TEXT("RAPID_TOUCH_SHOT touches=%d release=%s pending_touch=%d charging=%d"),Touches,*Mode->SprintReleaseDirection.ToString(),Mode->SprintKickPending?1:0,Charging?1:0);
+        Check(TEXT("rapid_touch_occurs_while_shot_is_charging"),Charging&&Touches>=1&&!Mode->SprintReleaseDirection.IsNearlyZero());
+        ReleaseCharge();Forward(0);Check(TEXT("rapid_touch_shot_command_survives_release"),PendingShot||ShotBufferActive);if(ShotBufferActive)PutBallAtNearestFoot();}
+        Wait=.08f;break;
+    case 145:
+        Check(TEXT("rapid_touch_buffer_commits_on_next_contact"),PendingShot||Mode->ShotInFlight);Wait=.75f;break;
+    case 146:
+        Check(TEXT("rapid_sprint_touch_to_shot_launches_cleanly"),Mode->ShotInFlight&&!PendingShot&&Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending);
+        SprintOff();Forward(0);Wait=.1f;break;
+    case 147:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->SprintDribbleTouchCount=0;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.25f;Mode->SprintKickPending=true;Mode->SprintContactUntil=Now+.09f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(460,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Dribble(Avatar,.016f);}
+        Check(TEXT("hard_loss_during_pending_contact_clears_all_recovery"),Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending&&Mode->SprintContactUntil==0.f);
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(0,300,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);}
+        Wait=.18f;break;
+    case 148:
+        {const FVector Gap=(Mode->Ball->GetComponentLocation()-Avatar->GetActorLocation()).GetSafeNormal2D();const FVector Facing=Avatar->GetActorForwardVector().GetSafeNormal2D();
+        UE_LOG(LogTemp,Display,TEXT("HARD_LOSS_REENTRY release=%s pending=%d yaw=%f facing_ball_dot=%f touches=%d"),*Mode->SprintReleaseDirection.ToString(),Mode->SprintKickPending?1:0,Avatar->GetActorRotation().Yaw,FVector::DotProduct(Facing,Gap),Mode->SprintDribbleTouchCount);
+        Check(TEXT("hard_loss_reentry_does_not_reactivate_old_recovery"),Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending&&Mode->SprintDribbleTouchCount==0&&FMath::Abs(Avatar->GetActorRotation().Yaw)<5.f&&FVector::DotProduct(Facing,Gap)<.5f);}
+        SprintOff();Wait=.1f;break;
+    case 149:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;
+        {const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(125,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.12f;StartCharge();
+        Check(TEXT("hard_loss_during_charge_starts_from_valid_possession"),Charging&&ShotChargeArmed);
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(470,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));Mode->Dribble(Avatar,.016f);}
+        Wait=1.05f;break;
+    case 150:
+        Check(TEXT("hard_loss_during_charge_invalidates_recovery_context"),!Mode->IsRecoverableSprintTouch(Avatar)&&Mode->SprintReleaseDirection.IsNearlyZero());
+        ReleaseCharge();
+        UE_LOG(LogTemp,Display,TEXT("HARD_LOSS_CHARGE_RELEASE buffer=%d pending=%d charging=%d gap=%f"),ShotBufferActive?1:0,PendingShot?1:0,Charging?1:0,FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation()));
+        Check(TEXT("hard_loss_during_charge_does_not_create_fresh_buffer"),!ShotBufferActive&&!PendingShot&&!Charging);
+        SprintOff();Wait=.1f;break;
+    case 151:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Avatar->SetActorRotation(FRotator::ZeroRotator);
+        NaturalBufferCommitAge=-1.f;NaturalBufferMinFoot=MAX_flt;NaturalBufferWasActive=false;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.18f;Mode->SprintKickPending=false;Mode->SprintContactUntil=0.f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(260,45,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(780,0,0));StartCharge();ChargeStarted=Now-.65f;ReleaseCharge();NaturalBufferWasActive=ShotBufferActive;}
+        Check(TEXT("natural_chase_buffer_starts_without_forced_contact"),ShotBufferActive&&!PendingShot);Wait=1.35f;break;
+    case 152:
+        UE_LOG(LogTemp,Display,TEXT("NATURAL_BUFFER_RECONTACT commit_age=%f min_foot=%f active=%d pending=%d in_flight=%d gap=%f"),NaturalBufferCommitAge,NaturalBufferMinFoot,ShotBufferActive?1:0,PendingShot?1:0,Mode->ShotInFlight?1:0,FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation()));
+        Check(TEXT("natural_chase_recontacts_before_buffer_timeout"),NaturalBufferCommitAge>0.f&&NaturalBufferCommitAge<ShotBufferWindow&&NaturalBufferMinFoot<=72.f&&!ShotBufferActive);
+        Check(TEXT("natural_chase_buffer_commits_or_launches_shot"),PendingShot||Mode->ShotInFlight);
+        Wait=.7f;break;
+    case 153:
+        Check(TEXT("natural_chase_buffered_shot_launches_cleanly"),Mode->ShotInFlight&&!PendingShot&&Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending);
+        SprintOff();Wait=.1f;break;
+    case 154:
+        ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->SprintDribbleTouchCount=0;
+        {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(590,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
+        const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->BallStopRequested=true;Mode->BallStopStarted=Now-.1f;Mode->HadControlInput=false;
+        Mode->SprintReleaseDirection=FVector::ForwardVector;Mode->SprintReleaseUntil=Now+.2f;Mode->SprintKickPending=true;Mode->SprintContactUntil=Now-.01f;Mode->SprintNextTouchAt=Now+1.f;
+        Mode->Ball->SetWorldLocation(Avatar->GetActorLocation()+FVector(300,0,BallZ-Avatar->GetActorLocation().Z),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(780,0,0));Mode->Dribble(Avatar,.016f);}
+        UE_LOG(LogTemp,Display,TEXT("STOP_STALE_PENDING_CLEAN release=%s pending=%d stop=%d gap=%f touches=%d"),*Mode->SprintReleaseDirection.ToString(),Mode->SprintKickPending?1:0,Mode->BallStopRequested?1:0,FVector::Dist2D(Mode->Ball->GetComponentLocation(),Avatar->GetActorLocation()),Mode->SprintDribbleTouchCount);
+        Check(TEXT("sprint_stop_remote_pending_contact_is_cancelled"),Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending&&Mode->SprintContactUntil==0.f&&Mode->SprintDribbleTouchCount==0);
+        Forward(1);Wait=.12f;break;
+    case 155:
+        UE_LOG(LogTemp,Display,TEXT("STOP_STALE_PENDING_RESUME release=%s pending=%d touches=%d ball_v=%s"),*Mode->SprintReleaseDirection.ToString(),Mode->SprintKickPending?1:0,Mode->SprintDribbleTouchCount,*Mode->Ball->GetPhysicsLinearVelocity().ToString());
+        Check(TEXT("sprint_stop_resume_does_not_resurrect_remote_touch"),Mode->SprintReleaseDirection.IsNearlyZero()&&!Mode->SprintKickPending&&Mode->SprintDribbleTouchCount==0);
+        Forward(0);SprintOff();Wait=.1f;break;
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
         FPlatformMisc::RequestExit(false);return;

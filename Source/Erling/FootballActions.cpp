@@ -27,6 +27,7 @@ bool AFootballPlayer::StartAction(EAction Kind,const FString& Clip,float Rate,fl
 {
     UAnimSequence* Sequence=Animations.FindRef(Clip);
     if(!Sequence)return false;
+    CancelBallTrap();
     TurningInPlace=false;
     EntryVelocity=GetVelocity();EntryVelocity.Z=0;ActionStartLocation=GetActorLocation();
     SetAnimation(Clip,false);PlaybackRate=Rate;AnimationTime=Sequence->GetPlayLength()*StartFraction;
@@ -43,6 +44,24 @@ void AFootballPlayer::ClearAction()
     Action=EAction::None;ActionElapsed=0;ActionVelocity=FVector::ZeroVector;ActionInterruptible=false;ActionAllowsMovement=false;
     if(WasSlide){auto& Velocity=GetCharacterMovement()->Velocity;Velocity.X=0;Velocity.Y=0;}
     GetCharacterMovement()->bOrientRotationToMovement=true;KickUntil=0;PlaybackRate=1;
+}
+void AFootballPlayer::StartBallTrap(FName Foot)
+{
+    if(Action!=EAction::None||PhysicalJump||TurningInPlace||GetCharacterMovement()->IsFalling())return;
+    const FString Clip=Foot==TEXT("foot_l")?TEXT("Kick_Left"):TEXT("Kick_Right");
+    auto* Sequence=Animations.FindRef(Clip);if(!Sequence)return;
+    BallTrapActive=true;BallTrapElapsed=0.f;BallTrapFoot=Foot;BallTrapCount++;
+    TurningInPlace=false;SetAnimation(Clip,false);PlaybackRate=1.f;
+    // Only use the preparation/contact part of the kick clip. It reads as a short
+    // sole/inside-foot trapping gesture without turning the stop into a shot.
+    AnimationTime=Sequence->GetPlayLength()*.12f;
+    GetCharacterMovement()->bOrientRotationToMovement=false;
+}
+void AFootballPlayer::CancelBallTrap()
+{
+    if(!BallTrapActive)return;
+    BallTrapActive=false;BallTrapElapsed=0.f;BallTrapFoot=NAME_None;PlaybackRate=1.f;
+    if(Action==EAction::None&&!TurningInPlace)GetCharacterMovement()->bOrientRotationToMovement=true;
 }
 void AFootballPlayer::UpdateAction(float Dt)
 {
@@ -106,6 +125,21 @@ void AFootballPlayer::UpdateAction(float Dt)
         if(auto Sequence=Animations.FindRef(CurrentAnimation);Sequence&&AnimationTime<Sequence->GetPlayLength()-.01f)return;
         PhysicalJump=false;
     }
+    if(BallTrapActive)
+    {
+        BallTrapElapsed+=Dt;
+        const FString Clip=BallTrapFoot==TEXT("foot_l")?TEXT("Kick_Left"):TEXT("Kick_Right");
+        if(CurrentAnimation!=Clip)SetAnimation(Clip,false);
+        if(auto Sequence=Animations.FindRef(Clip))
+        {
+            const float Alpha=FMath::SmoothStep(0.f,1.f,FMath::Clamp(BallTrapElapsed/.24f,0.f,1.f));
+            AnimationTime=Sequence->GetPlayLength()*FMath::Lerp(.12f,.31f,Alpha);
+        }
+        if(BallTrapElapsed<.24f)return;
+        BallTrapActive=false;BallTrapElapsed=0.f;BallTrapFoot=NAME_None;PlaybackRate=1.f;
+        SetAnimation(TEXT("Idle_Breathe"));
+        GetCharacterMovement()->bOrientRotationToMovement=true;
+    }
     if(Speed>15)
     {
         IdleElapsed=0;
@@ -152,12 +186,30 @@ bool AFootballMode::HasDribbleControl(const AFootballPlayer* P)const
 {
     if(!P||!Ball||Scored||BallHidden||ShotInFlight||P->GetCharacterMovement()->IsFalling())return false;
     const FVector Delta=Ball->GetComponentLocation()-P->GetActorLocation();
-    return Delta.Size2D()<=230.f&&Delta.Z<=-35.f;
+    float ControlRadius=230.f;
+    if(GetWorld()->GetTimeSeconds()<SprintReleaseUntil)ControlRadius=270.f;
+    else if(BallStopRequested&&!SprintReleaseDirection.IsNearlyZero())ControlRadius=270.f;
+    else if(const auto* PC=Cast<AFootballController>(P->GetController());PC&&PC->Sprint)ControlRadius=245.f;
+    return Delta.Size2D()<=ControlRadius&&Delta.Z<=-35.f;
 }
-bool AFootballMode::LaunchShot(AFootballPlayer* P,const FVector& Velocity)
+bool AFootballMode::IsRecoverableSprintTouch(const AFootballPlayer* P,float MaxGap)const
 {
-    if(!P||!Ball||BallHidden||Scored||FVector::Dist2D(Ball->GetComponentLocation(),P->GetActorLocation())>240)return false;
-    LastShot=GetWorld()->GetTimeSeconds();LastShooter=P;ShotInFlight=true;
+    if(!P||!Ball||BallHidden||Scored||ShotInFlight||SprintReleaseDirection.IsNearlyZero())return false;
+    const FVector Gap=Ball->GetComponentLocation()-P->GetActorLocation();
+    const float Now=GetWorld()->GetTimeSeconds();
+    return Gap.Size2D()<MaxGap&&Gap.Z<=-35.f&&Now<=SprintReleaseUntil+1.35f;
+}
+void AFootballMode::ClearSprintReleaseRecovery()
+{
+    SprintDribbleFoot=NAME_None;SprintLeadFoot=NAME_None;SprintContactUntil=0.f;
+    SprintReleaseUntil=0.f;SprintNextTouchAt=0.f;SprintKickPending=false;
+    SprintReleaseDirection=FVector::ZeroVector;
+}
+bool AFootballMode::LaunchShot(AFootballPlayer* P,const FVector& Velocity,bool CommittedShot)
+{
+    if(!P||!Ball||BallHidden||Scored||(!CommittedShot&&FVector::Dist2D(Ball->GetComponentLocation(),P->GetActorLocation())>240))return false;
+    LastShot=GetWorld()->GetTimeSeconds();LastShooter=P;ShotInFlight=true;BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;BallStopFoot=NAME_None;BallStopAnchor=FVector::ZeroVector;P->CancelBallTrap();
+    ClearSprintReleaseRecovery();
     Ball->SetLinearDamping(0.f);Ball->SetPhysicsLinearVelocity(Velocity);
     if(auto PC=Cast<AFootballController>(P->GetController()))PC->PlayEffect(TEXT("kick"));
     return true;
@@ -194,13 +246,44 @@ void AFootballController::BeginCelebration(bool Held)
 }
 void AFootballController::CancelPendingActions()
 {
-    Charging=false;PendingShot=false;PendingTrip=false;GoalSpacePending=false;SpaceHeld=false;GoalHoldRequested=false;
+    Charging=false;ShotChargeArmed=false;ShotBufferActive=false;ShotChargeAimDirection=FVector::ZeroVector;ShotBufferAimDirection=FVector::ZeroVector;PendingShot=false;PendingTrip=false;GoalSpacePending=false;SpaceHeld=false;GoalHoldRequested=false;
 }
 void AFootballController::UpdateActions(float Dt)
 {
     const EScreen ActiveScreen=Screen==EScreen::Settings?SettingsReturn:Screen;
     if((ActiveScreen!=EScreen::Game&&ActiveScreen!=EScreen::Main&&ActiveScreen!=EScreen::Credits)||!Avatar)return;
     const float Now=GetWorld()->GetTimeSeconds();
+    bool PhysicalShotContact=false;
+    if(ShotBufferActive)
+    {
+        auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
+        const bool Invalid=ActiveScreen!=EScreen::Game||!Mode||!Mode->Ball||Mode->BallHidden||Mode->Scored||Mode->ShotInFlight;
+        if(Invalid||Now-ShotBufferStarted>ShotBufferWindow)
+        {
+            ShotBufferActive=false;
+        }
+        else if(!PendingShot&&Avatar->CanAct()&&Now>=KickCooldown)
+        {
+            const FVector BallPosition=Mode->Ball->GetComponentLocation();
+            const FVector Gap=BallPosition-Avatar->GetActorLocation();
+            bool RealContact=Mode->BallStopped;
+            if(Avatar->GetMesh()&&Avatar->GetMesh()->DoesSocketExist(TEXT("foot_l"))&&Avatar->GetMesh()->DoesSocketExist(TEXT("foot_r")))
+            {
+                const FVector Left=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));
+                const FVector Right=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_r"));
+                const FVector Foot=FVector::Dist2D(BallPosition,Left)<=FVector::Dist2D(BallPosition,Right)?Left:Right;
+                const FVector FootGap=BallPosition-Foot;
+                RealContact=FVector::Dist2D(BallPosition,Foot)<=72.f&&FMath::Abs(FootGap.Z)<=75.f;
+            }
+            else RealContact=Gap.Size2D()<=95.f&&Gap.Z<=-25.f;
+            if(RealContact)
+            {
+                const float BufferedPower=ShotBufferSeconds;
+                FireShot(BufferedPower,ShotBufferAimDirection);
+                if(PendingShot)ShotBufferActive=false;
+            }
+        }
+    }
     if(GoalSpacePending)
     {
         GoalHoldRequested|=SpaceHeld&&Now-SpaceStarted>=1.f;
@@ -210,17 +293,101 @@ void AFootballController::UpdateActions(float Dt)
     {
         if(auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();Mode&&Mode->Ball&&!Mode->BallHidden)
         {
-            // Keep the possessed ball at the striking foot during the short wind-up.
             const float Side=Avatar->CurrentAnimation==TEXT("Kick_Left")?-18.f:18.f;
             const FVector Contact=Avatar->GetActorLocation()+Avatar->GetActorForwardVector()*82+Avatar->GetActorRightVector()*Side-FVector(0,0,74);
             const bool Demo=ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits;
-            const float ContactBlend=FMath::SmoothStep(0.f,1.f,FMath::Clamp(Avatar->ActionElapsed/FMath::Max(.01f,ShotContactTime),0.f,1.f));
-            const FVector Position=Demo?FMath::Lerp(ShotBallStart+Avatar->GetActorLocation()-ShotActorStart,Contact,ContactBlend):Contact;
-            Mode->Ball->SetWorldLocation(Position,false,nullptr,ETeleportType::TeleportPhysics);
-            Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+            if(Demo)
+            {
+                // The scripted menu shot may still stage the ball during its cinematic
+                // wind-up. Gameplay must never use this path: a live possessed ball
+                // keeps its real world position until the striking foot reaches it.
+                const float ContactBlend=FMath::SmoothStep(0.f,1.f,FMath::Clamp(Avatar->ActionElapsed/FMath::Max(.01f,ShotContactTime),0.f,1.f));
+                const FVector Position=FMath::Lerp(ShotBallStart+Avatar->GetActorLocation()-ShotActorStart,Contact,ContactBlend);
+                Mode->Ball->SetWorldLocation(Position,false,nullptr,ETeleportType::TeleportPhysics);
+                Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+            }
+            else
+            {
+                // EA-FC-style ownership: the animation comes to the ball, not the ball
+                // to an authored contact marker. Preserve continuous physics during the
+                // very short plant/wind-up so there is no visible pre-shot teleport.
+                Mode->Ball->SetLinearDamping(.72f);
+                const bool NormalKick=Avatar->Action==AFootballPlayer::EAction::Kick;
+                if(NormalKick)
+                {
+                    FVector StrikeDirection=PendingVelocity.GetSafeNormal2D();
+                    if(StrikeDirection.IsNearlyZero())StrikeDirection=Avatar->GetActorForwardVector().GetSafeNormal2D();
+                    const FVector StrikeRight=FRotationMatrix(StrikeDirection.Rotation()).GetUnitAxis(EAxis::Y);
+                    const FVector BallPosition=Mode->Ball->GetComponentLocation();
+
+                    // Move/rotate the player into a contextual strike position around the
+                    // ball. The ball itself is never translated. This is the missing half
+                    // of removing the old teleport: a committed player now adjusts the
+                    // run-up so the authored kick can physically meet the live ball.
+                    const float CurrentYaw=Avatar->GetActorRotation().Yaw;
+                    const float TargetYaw=StrikeDirection.Rotation().Yaw;
+                    const float NewYaw=FMath::FixedTurn(CurrentYaw,TargetYaw,900.f*Dt);
+                    Avatar->SetActorRotation(FRotator(0.f,NewYaw,0.f));
+
+                    const FVector Facing=Avatar->GetActorForwardVector().GetSafeNormal2D();
+                    const FVector FacingRight=Avatar->GetActorRightVector().GetSafeNormal2D();
+                    FVector DesiredActor=BallPosition-Facing*82.f-FacingRight*Side;
+                    DesiredActor.Z=Avatar->GetActorLocation().Z;
+                    FVector Approach=DesiredActor-Avatar->GetActorLocation();Approach.Z=0.f;
+                    // Aim to arrive at the physical strike position only slightly after
+                    // the authored contact frame. The longer +.34 s window below is a
+                    // safety deadline, not the desired feel; normal shots should still
+                    // meet the ball promptly instead of feeling queued/sluggish.
+                    const float ApproachDeadline=ShotContactTime+.08f;
+                    const float Remaining=FMath::Max(.06f,ApproachDeadline-Avatar->ActionElapsed);
+                    FVector DesiredApproach=FVector::ZeroVector;
+                    const FVector BallPlanarVelocity=Mode->Ball->GetPhysicsLinearVelocity().GetSafeNormal2D()*Mode->Ball->GetPhysicsLinearVelocity().Size2D();
+                    if(Approach.Size2D()>4.f||BallPlanarVelocity.Size2D()>20.f)
+                    {
+                        const FVector CorrectionVelocity=Approach/Remaining;
+                        DesiredApproach=(BallPlanarVelocity+CorrectionVelocity).GetClampedToMaxSize(1050.f);
+                    }
+                    if(auto* Movement=Avatar->GetCharacterMovement())
+                    {
+                        // UpdateAction rebuilds ActionVelocity from EntryVelocity each
+                        // frame. Blend from the actual persisted movement velocity instead,
+                        // then feed the result back into both paths.
+                        FVector CurrentPlanar=Movement->Velocity;CurrentPlanar.Z=0.f;
+                        Avatar->ActionVelocity=FMath::VInterpTo(CurrentPlanar,DesiredApproach,Dt,24.f);
+                        Movement->Velocity.X=Avatar->ActionVelocity.X;
+                        Movement->Velocity.Y=Avatar->ActionVelocity.Y;
+                    }
+
+                    if(Avatar->GetMesh())
+                    {
+                        const FName FootName=Avatar->CurrentAnimation==TEXT("Kick_Left")?TEXT("foot_l"):TEXT("foot_r");
+                        if(Avatar->GetMesh()->DoesSocketExist(FootName))
+                        {
+                            const FVector Foot=Avatar->GetMesh()->GetSocketLocation(FootName);
+                            const FVector FootToBall=BallPosition-Foot;
+                            const float FootDistance=FVector::Dist2D(Foot,BallPosition);
+                            const bool ContactPhase=Avatar->ActionElapsed>=ShotContactTime*.55f;
+                            PhysicalShotContact=ContactPhase&&FootDistance<=54.f&&FMath::Abs(FootToBall.Z)<=70.f;
+
+                            // Hold the kick at the authored contact pose for a very short
+                            // adjustment window instead of letting the foot swing through
+                            // empty space and launching the ball remotely.
+                            if(!PhysicalShotContact&&Avatar->ActionElapsed>=ShotContactTime)
+                            {
+                                if(auto* Sequence=Avatar->Animations.FindRef(Avatar->CurrentAnimation))
+                                    Avatar->AnimationTime=FMath::Min(Avatar->AnimationTime,Sequence->GetPlayLength()*.43f);
+
+                                const bool LateNearContact=Avatar->ActionElapsed>=ShotContactTime+.12f&&FootDistance<=68.f&&FMath::Abs(FootToBall.Z)<=75.f;
+                                PhysicalShotContact|=LateNearContact;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    if(PendingShot&&Avatar->ActionElapsed>=ShotContactTime)
+    const bool DemoOrFlipFallback=PendingShot&&(ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits||Avatar->Action==AFootballPlayer::EAction::Flip)&&Avatar->ActionElapsed>=ShotContactTime;
+    if(PendingShot&&(PhysicalShotContact||DemoOrFlipFallback))
     {
         PendingShot=false;
         if(auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>())
@@ -232,7 +399,11 @@ void AFootballController::UpdateActions(float Dt)
                 PendingVelocity=Delta.GetSafeNormal2D()*PendingVelocity.Size2D();
                 PendingVelocity.Z=Delta.Z/Flight-.5f*GetWorld()->GetGravityZ()*Flight;
             }
-            const bool Launched=Mode->LaunchShot(Avatar,PendingVelocity);
+            // Possession was validated when FireShot committed PendingShot. Do not
+            // re-acquire possession here: a fast live ball may legitimately open the
+            // gap during the wind-up, and pulling it back would reintroduce the visual
+            // teleport. Launch from its actual current position instead.
+            const bool Launched=Mode->LaunchShot(Avatar,PendingVelocity,true);
             if(!Launched)PendingTrip=false;
             const bool Demo=ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits;
             if(Launched&&Demo)
@@ -242,6 +413,14 @@ void AFootballController::UpdateActions(float Dt)
                 Avatar->GetCharacterMovement()->StopMovementImmediately();
             }
         }
+    }
+    if(PendingShot&&ActiveScreen==EScreen::Game&&Avatar->Action==AFootballPlayer::EAction::Kick&&Avatar->ActionElapsed>=ShotContactTime+.34f)
+    {
+        // If a contextual normal kick somehow still cannot physically meet the ball,
+        // fail the action rather than resurrecting the old remote/ghost kick.
+        PendingShot=false;PendingTrip=false;
+        if(auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();Mode&&Mode->Ball&&!Mode->BallHidden&&!Mode->ShotInFlight)
+            Mode->Ball->SetLinearDamping(.3f);
     }
     if(PendingTrip&&!PendingShot&&Avatar->ActionElapsed>=ShotRecoverTime)
     {

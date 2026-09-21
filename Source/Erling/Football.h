@@ -6,7 +6,7 @@
 #include "GameFramework/SaveGame.h"
 #include "Football.generated.h"
 
-class UStaticMeshComponent; class USkeletalMeshComponent; class UMaterialInstanceDynamic; class UAnimSequence; class ACameraActor; class SWidget; class SVerticalBox;
+class UStaticMeshComponent; class USkeletalMeshComponent; class UMaterialInstanceDynamic; class UAnimSequence; class ACameraActor; class UErlingInterface;
 class UAudioComponent;
 struct FKitOption { FString Label; TArray<FString> Meshes; FString Texture; };
 struct FKitCategory { FString Label; TArray<FKitOption> Options; };
@@ -39,6 +39,7 @@ public:
  float AnimationTime=0,PreviousAnimationTime=0,AnimationBlend=1,BlendSeconds=.16f,PlaybackRate=1,PreviousRate=1;
  bool AnimationLoops=true,PreviousLoops=true,PhysicalJump=false,ActionInterruptible=false,ActionAllowsMovement=false;
  bool PreviewAnimation=false;
+ bool BallTrapActive=false; float BallTrapElapsed=0.f; FName BallTrapFoot=NAME_None; int32 BallTrapCount=0;
  bool TurningInPlace=false; float TurnElapsed=0,TurnStartYaw=0,TurnTargetYaw=0;
  void BeginTurn(float TargetYaw);
  float ActionElapsed=0,ActionStartTime=0,ActionDuration=0,SlideDistance=0,IdleElapsed=0,JumpElapsed=0;
@@ -46,7 +47,7 @@ public:
  bool IsMovementLocked()const{return Action!=EAction::None&&!ActionAllowsMovement;}
  bool CanAct()const;
  bool StartAction(EAction Kind,const FString& Clip,float Rate=1.f,float StartFraction=0.f,bool Interruptible=false);
- void ClearAction(); void UpdateAction(float Dt); void StartPhysicalJump();
+ void ClearAction(); void UpdateAction(float Dt); void StartPhysicalJump(); void StartBallTrap(FName Foot); void CancelBallTrap();
  void ConfigurePiece(USkeletalMeshComponent* Piece);
 };
 UCLASS() class ERLING_API AFootballMode : public AGameModeBase {
@@ -59,21 +60,27 @@ public:
  UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
  void CreateNetCollision(); void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
  int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
- FName SprintDribbleFoot=NAME_None,SprintLeadFoot=NAME_None;
+ FName SprintDribbleFoot=NAME_None,SprintLeadFoot=NAME_None,CarryDribbleFoot=NAME_None;
  float SprintContactUntil=0,SprintReleaseUntil=0,SprintNextTouchAt=0,DribbleMinFootClearance=MAX_flt;
- float SprintDribbleMinDistance=MAX_flt,SprintDribbleMaxDistance=0;
- bool SprintKickPending=false; int32 SprintDribbleTouchCount=0;
+ float SprintDribbleMinDistance=MAX_flt,SprintDribbleMaxDistance=0,DribbleMinBodyAhead=MAX_flt,DribbleMinDirectionAhead=MAX_flt;
+ float CarryFootLockUntil=0;
+ float BallStopStarted=0;
+ FVector DribbleDirection=FVector::ZeroVector,SprintReleaseDirection=FVector::ZeroVector,LastPossessionDirection=FVector::ForwardVector,BallStopAnchor=FVector::ZeroVector;
+ FName BallStopFoot=NAME_None;
+ bool SprintKickPending=false,PossessionActive=false,HadControlInput=false,BallStopRequested=false,BallStopped=false,BallStopGesturePlayed=false,LastPossessionWasDigital=false; int32 SprintDribbleTouchCount=0,CarryFootSwitchCount=0;
  void Dribble(AFootballPlayer* Player,float Dt);
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
  bool HasBall(const AFootballPlayer* Player)const; bool HasDribbleControl(const AFootballPlayer* Player)const;
- bool LaunchShot(AFootballPlayer* Player,const FVector& Velocity);
+ bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=420.f)const;
+ void ClearSprintReleaseRecovery();
+ bool LaunchShot(AFootballPlayer* Player,const FVector& Velocity,bool CommittedShot=false);
  TWeakObjectPtr<AFootballPlayer> LastShooter;
  UStaticMeshComponent* Box(const FVector& P,const FVector& Size,const FLinearColor& Color,bool Collision=true);
 };
 UCLASS() class ERLING_API AFootballController : public APlayerController {
  GENERATED_BODY()
 public:
- AFootballController(); virtual void BeginPlay() override; virtual void SetupInputComponent() override; virtual void Tick(float Dt) override;
+ AFootballController(); virtual void BeginPlay() override; virtual void EndPlay(const EEndPlayReason::Type Reason) override; virtual void SetupInputComponent() override; virtual void Tick(float Dt) override;
  enum class EScreen:uint8 { Main,Editor,Game,Pause,Settings,Credits };
  EScreen Screen=EScreen::Main,SettingsReturn=EScreen::Main;
  UPROPERTY() AFootballPlayer* Avatar=nullptr;
@@ -84,7 +91,10 @@ public:
  UPROPERTY() TArray<UAudioComponent*> ActiveEffects;
  void PlayEffect(const FString& Name,float Gain=1.f); void UpdateEffectsVolume(float V);
  float EditorZoom=0; bool Dragging=false,MouseWasDown=false; float LastMouseX=0;
- bool Charging=false; float ChargeStarted=0; void StartCharge(); void ReleaseCharge(); void FireShot(float Seconds); void UpdateDemo(float Dt);
+ bool Charging=false,ShotChargeArmed=false,ShotBufferActive=false;
+ float ChargeStarted=0,ShotBufferStarted=0,ShotBufferSeconds=0;
+ FVector ShotChargeAimDirection=FVector::ZeroVector,ShotBufferAimDirection=FVector::ZeroVector;
+ void StartCharge(); void ReleaseCharge(); void FireShot(float Seconds,FVector AimOverride=FVector::ZeroVector); void UpdateDemo(float Dt);
  int DemoDirection=1,DemoPhase=0,DemoShotDistanceIndex=-1; float DemoShotAt=0,DemoShotTargetX=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
@@ -98,11 +108,13 @@ public:
  UPROPERTY(Config) float SlideRunDistance=520;
  UPROPERTY(Config) float SlideSprintMultiplier=1.25f;
  UPROPERTY(Config) float TripChance=.33f;
+ UPROPERTY(Config) float ShotBufferWindow=1.4f;
  int32 PreviewIndex=-1; void CycleAnimationPreview(int32 Direction); FText PreviewAnimationText()const;
  bool BallControlHeld=false; void BallControlOn(); void BallControlOff();
- void RunChecks(); int32 TestStage_Latest=0; double TestAt=0; FString Report;
+ bool HasDigitalMoveIntent()const; FVector GetMoveIntentWorld()const;
+ void RunChecks(); int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
- TSharedPtr<SWidget> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
+ UPROPERTY(Transient) TObjectPtr<UErlingInterface> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
  FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
  float UpdatePitchCameraLead(float Dt);
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
