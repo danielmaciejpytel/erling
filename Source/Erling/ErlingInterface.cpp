@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Slider.h"
+#include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/ProgressBar.h"
 #include "Framework/Application/SlateApplication.h"
@@ -198,9 +199,40 @@ void UErlingInterface::UpdateValues()
             if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(C,AboveHead,Position,false))
                 if (auto* PlayerSlot=Cast<UCanvasPanelSlot>(Panel->Slot))
                 {
+                    constexpr float ShotPanelWidth=150.f;
+                    constexpr float ShotPanelHeight=26.f;
+                    PlayerSlot->SetAutoSize(false);
+                    PlayerSlot->SetAnchors(FAnchors(0.f,0.f));
+                    PlayerSlot->SetAlignment(FVector2D::ZeroVector);
+                    PlayerSlot->SetSize(FVector2D(ShotPanelWidth,ShotPanelHeight));
                     const auto Viewport=UWidgetLayoutLibrary::GetViewportWidgetGeometry(C);
                     Position=Panel->GetParent()->GetCachedGeometry().AbsoluteToLocal(Viewport.LocalToAbsolute(Position));
-                    PlayerSlot->SetPosition(Position-FVector2D(PlayerSlot->GetSize().X*.5f,PlayerSlot->GetSize().Y));
+                    PlayerSlot->SetPosition(Position-FVector2D(ShotPanelWidth*.5f,ShotPanelHeight));
+
+                    // Keep the authored layers compact as well. A previous UI
+                    // restyle left one of these child slots serialized at a much
+                    // larger size, which produced a giant dark rectangle while
+                    // the charge fill itself remained correctly sized.
+                    if (auto* ShotCanvas=Cast<UCanvasPanel>(Panel))
+                    {
+                        for (UWidget* Child:ShotCanvas->GetAllChildren())
+                            if (auto* ChildSlot=Cast<UCanvasPanelSlot>(Child->Slot))
+                            {
+                                ChildSlot->SetAutoSize(false);
+                                ChildSlot->SetAnchors(FAnchors(0.f,0.f));
+                                ChildSlot->SetAlignment(FVector2D::ZeroVector);
+                                if (Child->GetFName()==TEXT("PlayerShotFill"))
+                                {
+                                    ChildSlot->SetPosition(FVector2D(10.f,9.f));
+                                    ChildSlot->SetSize(FVector2D(130.f,8.f));
+                                }
+                                else
+                                {
+                                    ChildSlot->SetPosition(FVector2D::ZeroVector);
+                                    ChildSlot->SetSize(FVector2D(ShotPanelWidth,ShotPanelHeight));
+                                }
+                            }
+                    }
                     Visible=true;
                 }
         }
