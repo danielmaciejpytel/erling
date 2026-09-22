@@ -17,6 +17,7 @@
 #include "Components/ButtonSlot.h"
 #include "Engine/Texture2D.h"
 #include "Engine/Font.h"
+#include "Engine/FontFace.h"
 #include "Brushes/SlateNoResource.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -45,7 +46,8 @@ public:
     explicit FLayout(UWidgetTree* InTree):Tree(InTree) {}
     template<class T> T* Make(const FString& Name=TEXT(""))
     {
-        auto* Widget=Tree->ConstructWidget<T>(T::StaticClass(), *(!Name.IsEmpty()?Name:FString::Printf(TEXT("Element_%03d"),++Serial)));
+        const FName WidgetName=Name.IsEmpty()?MakeUniqueObjectName(Tree,T::StaticClass(),*FString::Printf(TEXT("Element_%03d"),++Serial)):FName(*Name);
+        auto* Widget=Tree->ConstructWidget<T>(T::StaticClass(), WidgetName);
         Widget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
         return Widget;
     }
@@ -150,6 +152,177 @@ public:
         Image(C,Mouse?TEXT("T_UI_Mouse_Outline"):TEXT("T_UI_Keycap_Wide_Normal"),X,-5,KeyW,46);
         if(!Mouse) Text(C,TEXT(""),Key,Key==TEXT("SPACE")?TEXT("SPACJA"):Key,X,6,KeyW,27,13,White,true,true);
         Text(C,TEXT(""),En,Pl,X+KeyW+12,6,W-KeyW-12,30,15,White);
+    }
+    bool UpdateStorybook()
+    {
+        // Update visual properties in place, preserving actions and Designer additions.
+        const FLinearColor Cream=FLinearColor::FromSRGBColor(FColor(243,238,228));
+        const FLinearColor Rose=FLinearColor::FromSRGBColor(FColor(218,91,145));
+        const FString FontPackage=TEXT("/Game/Erling/UI/Fonts/F_Storybook");
+        auto* Font=FPackageName::DoesPackageExist(FontPackage)?LoadObject<UFont>(nullptr,*(FontPackage+TEXT(".F_Storybook"))):nullptr;
+        if(!Font)
+        {
+            TArray<uint8> Bytes;
+            const FString Filename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/PatrickHand-Regular.ttf");
+            if(!FFileHelper::LoadFileToArray(Bytes,*Filename)) return false;
+            auto* Face=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_PatrickHand")),TEXT("FF_PatrickHand"),RF_Public|RF_Standalone);
+            Face->InitializeFromBulkData(Filename,EFontHinting::Default,Bytes.GetData(),Bytes.Num());
+            Face->LoadingPolicy=EFontLoadingPolicy::Inline;
+            Font=NewObject<UFont>(CreatePackage(*FontPackage),TEXT("F_Storybook"),RF_Public|RF_Standalone);
+            Font->FontCacheType=EFontCacheType::Runtime;
+            FTypefaceEntry Entry(TEXT("Regular")); Entry.Font=FFontData(Face);
+            Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.Add(Entry);
+            for(UObject* Asset:TArray<UObject*>{Face,Font})
+            {
+                FAssetRegistryModule::AssetCreated(Asset); Asset->MarkPackageDirty();
+                FSavePackageArgs Save;Save.TopLevelFlags=RF_Public|RF_Standalone;Save.SaveFlags=SAVE_NoError;
+                if(!UPackage::SavePackage(Asset->GetOutermost(),Asset,*FPackageName::LongPackageNameToFilename(Asset->GetOutermost()->GetName(),FPackageName::GetAssetPackageExtension()),Save)) return false;
+            }
+        }
+        auto Move=[&](UWidget* W,float X,float Y,float Width,float Height)
+        {
+            if(!W)return;
+            // The panel owns the serialized slot; loaded Widget::Slot back-pointers
+            // can refer to a stale template until the Slate tree is constructed.
+            TArray<UWidget*> All;Tree->GetAllWidgets(All);
+            for(UWidget* Candidate:All) if(auto* Panel=Cast<UPanelWidget>(Candidate))
+                for(UPanelSlot* Owned:Panel->GetSlots()) if(Owned->Content==W)
+                    if(auto* Slot=Cast<UCanvasPanelSlot>(Owned))
+                    { Slot->SetAutoSize(false);Slot->SetAnchors(FAnchors(0,0));Slot->SetAlignment(FVector2D::ZeroVector);Slot->SetPosition(FVector2D(X,Y));Slot->SetSize(FVector2D(Width,Height)); }
+        };
+        auto SetType=[&](UTextBlock* T,int32 Size,int32 Weight=0)
+        {
+            FSlateFontInfo Info(Font,Size,FName(TEXT("Regular")));
+            Info.OutlineSettings.OutlineSize=Weight;Info.OutlineSettings.OutlineColor=Cream;
+            T->SetFont(Info);
+        };
+        TArray<UWidget*> Widgets;Tree->GetAllWidgets(Widgets);
+        for(UWidget* W:Widgets)
+        {
+            if(auto* T=Cast<UTextBlock>(W))
+            {
+                SetType(T,T->GetFont().Size);
+                const auto Old=T->GetColorAndOpacity().GetSpecifiedColor();
+                T->SetColorAndOpacity(Old.R>Old.G*2.f?Rose:Cream);
+            }
+            if(auto* I=Cast<UImage>(W))
+            {
+                auto* Resource=I->GetBrush().GetResourceObject();if(!Resource) continue;
+                FString Name=Resource->GetName();
+                if(Name.Contains(TEXT("SheenOverlay"))||Name.Contains(TEXT("Panel_Frame"))||Name.StartsWith(TEXT("T_UI_Glow_")))
+                    I->SetVisibility(ESlateVisibility::Collapsed);
+                else if(Name.StartsWith(TEXT("T_UI_Icon_")))
+                {
+                    Name=Name.Replace(TEXT("_Silver"),TEXT("_White")).Replace(TEXT("_Accent"),TEXT("_White"));
+                    I->SetBrush(Brush(Name));I->SetColorAndOpacity(Cream);I->SetRenderOpacity(1);
+                }
+                else if(Assets.Contains(Name)) { I->SetBrush(Brush(Name));I->SetRenderOpacity(.98f); }
+            }
+            if(auto* B=Cast<UErlingUIButton>(W))
+            {
+                FButtonStyle Style=B->GetStyle();
+                auto Replace=[&](FSlateBrush& Value) {if(auto* R=Value.GetResourceObject()) if(Assets.Contains(R->GetName())) Value=Brush(R->GetName());};
+                Replace(Style.Normal);Replace(Style.Hovered);Replace(Style.Pressed);Replace(Style.Disabled);
+                if(auto* Icon=Cast<UImage>(B->GetContent()))
+                {
+                    Style.NormalPadding=FMargin(0);Style.PressedPadding=FMargin(0,1,0,-1);
+                    // Keep a visible arrow inside the compact wardrobe buttons.
+                    for(UPanelSlot* Owned:B->GetSlots()) if(auto* ContentSlot=Cast<UButtonSlot>(Owned))
+                    {ContentSlot->SetPadding(FMargin(12));ContentSlot->SetHorizontalAlignment(HAlign_Fill);ContentSlot->SetVerticalAlignment(VAlign_Fill);}
+                }
+                B->SetStyle(Style);
+            }
+            if(auto* Bar=Cast<UProgressBar>(W)) Bar->SetFillColorAndOpacity(Rose);
+        }
+        auto* Main=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("MainPanel")));
+        if(!Main) return false;
+        Move(Main,76,98,478,894);
+        for(UWidget* W:Main->GetAllChildren())
+        {
+            if(auto* I=Cast<UImage>(W))
+            {
+                const auto* R=I->GetBrush().GetResourceObject();
+                if(R&&R->GetName()==TEXT("T_UI_Panel_Dark")) Move(I,0,0,478,894);
+                else I->SetVisibility(ESlateVisibility::Collapsed);
+            }
+            if(auto* T=Cast<UErlingUIText>(W))
+            {
+                const FString En=T->English.ToString();
+                if(En==TEXT("ERLING")) {Move(T,46,-4,394,150);SetType(T,108,2);}
+                else if(En.Contains(TEXT("C L U B"))||En==TEXT("FOOTBALL CLUB"))
+                {
+                    T->English=FText::FromString(TEXT("FOOTBALL CLUB"));T->Polish=T->English;T->SetText(T->English);
+                    Move(T,58,164,366,64);SetType(T,38);auto Info=T->GetFont();Info.LetterSpacing=120;T->SetFont(Info);T->SetColorAndOpacity(Rose);
+                }
+            }
+        }
+        for(UWidget* W:Widgets) if(auto* T=Cast<UErlingUIText>(W))
+            if(T->English.ToString()==TEXT("Your player. Your pitch."))
+            {
+                SetType(T,32);T->SetAutoWrapText(false);T->SetMinDesiredWidth(0);
+                auto* Fit=Cast<UScaleBox>(Tree->FindWidget(TEXT("StorybookTaglineFit")));
+                if(!Fit)
+                {
+                    Main->RemoveChild(T);Fit=Make<UScaleBox>(TEXT("StorybookTaglineFit"));
+                    Fit->SetStretch(EStretch::ScaleToFit);Fit->SetStretchDirection(EStretchDirection::DownOnly);
+                    Fit->AddChild(T);At(Main,Fit,46,270,396,64);
+                    auto* FitSlot=CastChecked<UScaleBoxSlot>(T->Slot);
+                    FitSlot->SetHorizontalAlignment(HAlign_Left);FitSlot->SetVerticalAlignment(VAlign_Center);
+                }
+                Move(Fit,46,270,396,64);
+            }
+        const TCHAR* Names[]={TEXT("PlayButton"),TEXT("CharacterButton"),TEXT("SettingsButton"),TEXT("CreditsButton"),TEXT("QuitButton")};
+        for(int32 Index=0;Index<5;++Index)
+        {
+            auto* B=Cast<UErlingUIButton>(Tree->FindWidget(Names[Index]));if(!B)return false;
+            Move(B,34,374+Index*102,410,86);
+            auto* Body=Cast<UCanvasPanel>(B->GetContent());
+            for(UWidget* W:Body->GetAllChildren())
+            {
+                if(auto* T=Cast<UTextBlock>(W)) {Move(T,104,Index==1?17:13,250,58);SetType(T,Index==0?36:Index==1?26:30);}
+                if(auto* I=Cast<UImage>(W))
+                {
+                    const bool Chevron=I->GetBrush().GetResourceObject()->GetName().Contains(TEXT("Chevron"));
+                    Move(I,Chevron?363:20,Chevron?27:16,Chevron?24:54,Chevron?32:54);
+                }
+            }
+        }
+        auto* HUD=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GameHUD")));
+        auto* Hints=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("ControlHints")));
+        if(!HUD||!Hints)return false;
+        for(UWidget* W:HUD->GetAllChildren())
+            if(auto* I=Cast<UImage>(W))
+                if(auto* R=I->GetBrush().GetResourceObject())
+                    if(R->GetName()==TEXT("T_UI_Panel_Dark")) Move(I,42,978,1836,82);
+        // Only the informational row is rebuilt; no input bindings live here.
+        const auto OldHints=Hints->GetAllChildren();Hints->ClearChildren();
+        for(UWidget* W:OldHints) W->Rename(nullptr,GetTransientPackage(),REN_DontCreateRedirectors|REN_NonTransactional);
+        Move(Hints,76,994,1770,54);
+        auto KeyHint=[&](float X,float KeyWidth,float TotalWidth,const FString& Key,const FString& En,const FString& Pl)
+        {
+            if(Key==TEXT("WASD"))
+                for(int32 K=0;K<4;++K)
+                {
+                    Image(Hints,TEXT("T_UI_Keycap_Wide_Normal"),X+K*37,3,37,44);
+                    auto* T=Text(Hints,TEXT(""),Key.Mid(K,1),Key.Mid(K,1),X+K*37,3,37,44,22,Cream,false,true);SetType(T,22);
+                }
+            else if(Key.IsEmpty()) Image(Hints,TEXT("T_UI_Mouse_Outline"),X,0,34,48);
+            else
+            {
+                Image(Hints,TEXT("T_UI_Keycap_Wide_Normal"),X,3,KeyWidth,44);
+                auto* T=Text(Hints,TEXT(""),Key,Key,X,3,KeyWidth,44,22,Cream,false,true);SetType(T,22);
+            }
+            auto* T=Text(Hints,TEXT(""),En,Pl,X+KeyWidth+10,7,TotalWidth-KeyWidth-10,44,20,Cream);SetType(T,20);
+        };
+        KeyHint(0,148,237,TEXT("WASD"),TEXT("move"),TEXT("ruch"));
+        KeyHint(245,88,202,TEXT("CTRL"),TEXT("control"),TEXT("kontrola"));
+        KeyHint(455,96,195,TEXT("SHIFT"),TEXT("sprint"),TEXT("sprint"));
+        KeyHint(658,105,196,TEXT("SPACE"),TEXT("jump"),TEXT("skok"));
+        KeyHint(862,34,272,TEXT(""),TEXT("hold / release"),TEXT("przytrzymaj / puść"));
+        KeyHint(1142,84,186,TEXT("RMB"),TEXT("slide"),TEXT("wślizg"));
+        KeyHint(1336,40,203,TEXT("R"),TEXT("reset ball"),TEXT("reset piłki"));
+        KeyHint(1547,78,196,TEXT("ESC"),TEXT("pause"),TEXT("pauza"));
+        return Missing==0;
     }
     void UpdateHUD()
     {
@@ -302,7 +475,8 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
     UWidgetBlueprint* Blueprint=FPackageName::DoesPackageExist(PackageName)?LoadObject<UWidgetBlueprint>(nullptr,*(PackageName+TEXT(".WBP_ErlingInterface"))):nullptr;
     const bool UpdateHUD=FParse::Param(*Params,TEXT("UpdateHUD"));
     const bool UpdateHint=FParse::Param(*Params,TEXT("UpdateCharacterHint"));
-    const bool PartialUpdate=UpdateHUD||UpdateHint;
+    const bool Storybook=FParse::Param(*Params,TEXT("Storybook"));
+    const bool PartialUpdate=UpdateHUD||UpdateHint||Storybook;
     if(PartialUpdate && (!Blueprint || !Blueprint->WidgetTree)) { UE_LOG(LogTemp,Error,TEXT("Partial update requires an existing interface."));return 1; }
     if (Blueprint && !PartialUpdate && !FParse::Param(*Params,TEXT("Replace"))) { UE_LOG(LogTemp,Error,TEXT("Designer asset exists. Refusing to overwrite; archive it and use -Replace explicitly."));return 1; }
     FString ManifestPath;
@@ -319,10 +493,17 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
     if(!PartialUpdate || !Blueprint->WidgetTree) Blueprint->WidgetTree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
     ErlingUIAuthoring::FLayout Layout(Blueprint->WidgetTree);
     for(auto Value:Manifest->GetArrayField(TEXT("assets"))) Layout.Assets.Add(Value->AsObject()->GetStringField(TEXT("name")),Value->AsObject());
-    if(UpdateHint) { if(!Layout.UpdateCharacterHint()) return 1; }
+    if(Storybook) { if(!Layout.UpdateStorybook()) return 1; }
+    else if(UpdateHint) { if(!Layout.UpdateCharacterHint()) return 1; }
     else if(UpdateHUD) Layout.UpdateHUD(); else Layout.Build();
     if(Layout.Missing) return 1;
     TArray<UWidget*> DesignerWidgets;Blueprint->WidgetTree->GetAllWidgets(DesignerWidgets);
+    if(Storybook)
+    {
+        TSet<FName> LiveNames;for(UWidget* Widget:DesignerWidgets) LiveNames.Add(Widget->GetFName());
+        TArray<FName> OldNames;Blueprint->WidgetVariableNameToGuidMap.GetKeys(OldNames);
+        for(FName Name:OldNames) if(!LiveNames.Contains(Name)) Blueprint->OnVariableRemoved(Name);
+    }
     for(UWidget* Widget:DesignerWidgets) if(!Blueprint->WidgetVariableNameToGuidMap.Contains(Widget->GetFName())) Blueprint->OnVariableAdded(Widget->GetFName());
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
     FKismetEditorUtilities::CompileBlueprint(Blueprint);
