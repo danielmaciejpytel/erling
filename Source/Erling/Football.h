@@ -37,6 +37,7 @@ public:
  EAction Action=EAction::None;
  FString PreviousAnimation;
  float AnimationTime=0,PreviousAnimationTime=0,AnimationBlend=1,BlendSeconds=.16f,PlaybackRate=1,PreviousRate=1;
+ float JumpAnimationScale=1.f;
  bool AnimationLoops=true,PreviousLoops=true,PhysicalJump=false,ActionInterruptible=false,ActionAllowsMovement=false;
  bool PreviewAnimation=false;
  bool BallTrapActive=false; float BallTrapElapsed=0.f; FName BallTrapFoot=NAME_None; int32 BallTrapCount=0;
@@ -69,6 +70,8 @@ public:
  FName BallStopFoot=NAME_None;
  bool SprintKickPending=false,PossessionActive=false,HadControlInput=false,BallStopRequested=false,BallStopped=false,BallStopGesturePlayed=false,LastPossessionWasDigital=false; int32 SprintDribbleTouchCount=0,CarryFootSwitchCount=0;
  void Dribble(AFootballPlayer* Player,float Dt);
+ UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FinishedBalls;
+ void PreserveFinishedBall();
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
  bool HasBall(const AFootballPlayer* Player)const; bool HasDribbleControl(const AFootballPlayer* Player)const;
  bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=420.f)const;
@@ -117,6 +120,16 @@ public:
  UPROPERTY(Transient) TObjectPtr<UErlingInterface> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
  FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
  float UpdatePitchCameraLead(float Dt);
+ FVector PitchShotOffset=FVector::ZeroVector;
+ FVector PitchViewCenter=FVector::ZeroVector;
+ bool PitchViewInitialized=false;
+ bool PitchViewReturning=false;
+ FVector UpdatePitchViewCenter(float Dt,const FVector& Desired);
+ float PitchShotSeen=-100.f,PitchShotStarted=0.f,PitchShotGoalX=0.f;
+ bool PitchShotTracking=false;
+ float PitchShotHoldRemaining=0.f;
+ FVector PitchShotHoldTarget=FVector::ZeroVector;
+ FVector UpdatePitchShotTarget(float Dt,const FVector& Cam,const FVector& NormalTarget,float Fov);
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
  FString Localize(const TCHAR* English,const TCHAR* Polish) const;
  FString LocalizeCatalogLabel(const FString& Value) const;

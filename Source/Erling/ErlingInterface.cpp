@@ -1,6 +1,8 @@
 #include "ErlingInterface.h"
 #include "Football.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Slider.h"
 #include "Components/CanvasPanelSlot.h"
@@ -184,6 +186,26 @@ void UErlingInterface::UpdateValues()
     }
     const bool Game=C->Screen==AFootballController::EScreen::Game;
     const bool Shot=Game&&(C->Charging||C->ShotBufferActive);
+    if (auto* Panel=GetWidgetFromName(TEXT("PlayerShotPanel")))
+    {
+        FVector2D Position;
+        bool Visible=false;
+        if (Shot && C->Avatar && C->Avatar->Face)
+        {
+            const FBoxSphereBounds& Bounds=C->Avatar->Face->Bounds;
+            // Rendering bounds are enlarged for flips; remove that culling padding.
+            const FVector AboveHead=Bounds.Origin+FVector(0,0,Bounds.BoxExtent.Z/FMath::Max(C->Avatar->Face->BoundsScale,0.01f)+12.f);
+            if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(C,AboveHead,Position,false))
+                if (auto* PlayerSlot=Cast<UCanvasPanelSlot>(Panel->Slot))
+                {
+                    const auto Viewport=UWidgetLayoutLibrary::GetViewportWidgetGeometry(C);
+                    Position=Panel->GetParent()->GetCachedGeometry().AbsoluteToLocal(Viewport.LocalToAbsolute(Position));
+                    PlayerSlot->SetPosition(Position-FVector2D(PlayerSlot->GetSize().X*.5f,PlayerSlot->GetSize().Y));
+                    Visible=true;
+                }
+        }
+        Panel->SetVisibility(Visible?ESlateVisibility::HitTestInvisible:ESlateVisibility::Collapsed);
+    }
     if (auto* Panel=GetWidgetFromName(TEXT("ShotPanel"))) Panel->SetVisibility(Shot?ESlateVisibility::HitTestInvisible:ESlateVisibility::Collapsed);
     if (Game)
     {
@@ -196,6 +218,7 @@ void UErlingInterface::UpdateValues()
             if (C->ShotBufferActive) State+=L(TEXT(" · QUEUED"),TEXT(" · OCZEKUJE"));
             SetText(TEXT("ShotValue"),State);
             if (auto* Bar=Cast<UProgressBar>(GetWidgetFromName(TEXT("ShotFill")))) Bar->SetPercent(Charge/1.5f);
+            if (auto* Bar=Cast<UProgressBar>(GetWidgetFromName(TEXT("PlayerShotFill")))) Bar->SetPercent(Charge/1.5f);
         }
     }
     FString Message;

@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
 
 void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 {
@@ -18,6 +19,20 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
     // Flip/root motion can move the stylized modular pieces far outside their rest bounds.
     // A generous dynamic bound prevents one-frame component culling during the airborne flip.
     Piece->SetBoundsScale(4.f);
+    // The comparison map owns its materials; the original Pitch keeps its look.
+    if(GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
+    {
+        Piece->SetRenderCustomDepth(true);
+        Piece->SetCustomDepthStencilValue(1);
+        for(int32 Index=0;Index<Piece->GetNumMaterials();++Index)
+        {
+            if(auto* Original=Piece->GetMaterial(Index))
+            {
+                const FString Path=FString::Printf(TEXT("/Game/Erling/ArtDirection/%s.%s"),*Original->GetName(),*Original->GetName());
+                if(auto* Styled=LoadObject<UMaterialInterface>(nullptr,*Path))Piece->SetMaterial(Index,Styled);
+            }
+        }
+    }
 }
 bool AFootballPlayer::CanAct()const
 {
@@ -109,14 +124,14 @@ void AFootballPlayer::UpdateAction(float Dt)
     }
     if(GetCharacterMovement()->IsFalling())
     {
-        if(!PhysicalJump){PhysicalJump=true;JumpElapsed=0;SetAnimation(Speed>80?TEXT("Jump_Run"):TEXT("Jump"),false);}
+        if(!PhysicalJump){PhysicalJump=true;JumpElapsed=0;JumpAnimationScale=1.f;SetAnimation(Speed>80?TEXT("Jump_Run"):TEXT("Jump"),false);}
         JumpElapsed+=Dt;
         // Hold the flight pose; landing advances the recovery rather than replaying a second takeoff.
         if(auto Sequence=Animations.FindRef(CurrentAnimation))
         {
             const float Phase=GetVelocity().Z>40?.44f:GetVelocity().Z< -40?.65f:.55f;
             const float Desired=Sequence->GetPlayLength()*Phase;
-            AnimationTime=FMath::FInterpTo(AnimationTime,Desired,Dt,12.f);
+            AnimationTime=FMath::FInterpTo(AnimationTime,Desired,Dt,CurrentAnimation==TEXT("Jump_Run")?14.f*JumpAnimationScale:12.f);
         }
         return;
     }
@@ -146,7 +161,9 @@ void AFootballPlayer::UpdateAction(float Dt)
         // Hysteresis and shared normalized phase avoid chatter and swapped supporting feet.
         const float RunThreshold=CurrentAnimation==TEXT("Walk")?215:180;
         const float SprintThreshold=CurrentAnimation==TEXT("Sprint")?595:635;
-        const FString Clip=Speed>SprintThreshold?TEXT("Sprint"):Speed>RunThreshold?TEXT("Run"):TEXT("Walk");
+        const auto* PC=Cast<AFootballController>(GetController());
+        const bool ControlledWalk=PC&&PC->BallControlHeld&&!PC->Sprint;
+        const FString Clip=ControlledWalk?TEXT("Walk"):Speed>SprintThreshold?TEXT("Sprint"):Speed>RunThreshold?TEXT("Run"):TEXT("Walk");
         SetAnimation(Clip);
         const float Reference=Clip==TEXT("Sprint")?765:Clip==TEXT("Run")?510:180;
         PlaybackRate=FMath::FInterpTo(PlaybackRate,FMath::Clamp(Speed/Reference,.65f,1.3f),Dt,10.f);
@@ -162,7 +179,10 @@ void AFootballPlayer::StartPhysicalJump()
 {
     if(!CanAct())return;
     TurningInPlace=false;GetCharacterMovement()->bOrientRotationToMovement=true;
-    PhysicalJump=true;JumpElapsed=0;PlaybackRate=2.f;
+    const auto* PC=Cast<AFootballController>(GetController());
+    // Latch at takeoff so releasing sprint in mid-air does not change animation tempo.
+    JumpAnimationScale=PC&&PC->Sprint&&GetVelocity().Size2D()>560.f?1.05f:1.f;
+    PhysicalJump=true;JumpElapsed=0;PlaybackRate=GetVelocity().Size2D()>80?2.3f*JumpAnimationScale:2.f;
     SetAnimation(GetVelocity().Size2D()>80?TEXT("Jump_Run"):TEXT("Jump"),false);
     if(auto Sequence=Animations.FindRef(CurrentAnimation))AnimationTime=Sequence->GetPlayLength()*.28f;
     Jump();
@@ -208,7 +228,7 @@ void AFootballMode::ClearSprintReleaseRecovery()
 bool AFootballMode::LaunchShot(AFootballPlayer* P,const FVector& Velocity,bool CommittedShot)
 {
     if(!P||!Ball||BallHidden||Scored||(!CommittedShot&&FVector::Dist2D(Ball->GetComponentLocation(),P->GetActorLocation())>240))return false;
-    LastShot=GetWorld()->GetTimeSeconds();LastShooter=P;ShotInFlight=true;BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;BallStopFoot=NAME_None;BallStopAnchor=FVector::ZeroVector;P->CancelBallTrap();
+    LastShot=GetWorld()->GetTimeSeconds();LastShooter=P;ShotInFlight=true;PossessionActive=false;BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;BallStopFoot=NAME_None;BallStopAnchor=FVector::ZeroVector;P->CancelBallTrap();
     ClearSprintReleaseRecovery();
     Ball->SetLinearDamping(0.f);Ball->SetPhysicsLinearVelocity(Velocity);
     if(auto PC=Cast<AFootballController>(P->GetController()))PC->PlayEffect(TEXT("kick"));
@@ -235,7 +255,7 @@ void AFootballController::BeginCelebration(bool Held)
     GoalSpacePending=false;
     const FString Clip=Held?TEXT("JoyJump_Run"):TEXT("JoyJump_Standing");
     const float StartFraction=Held?.25f:0.f;
-    if(Avatar->StartAction(AFootballPlayer::EAction::Emote,Clip,1.15f,StartFraction,false))
+    if(Avatar->StartAction(AFootballPlayer::EAction::Emote,Clip,1.32f,StartFraction,false))
     {
         // Goal jumps are celebrations, not roots that pin the player to the grass.
         // Keep normal CharacterMovement active so an already-running player carries on.
@@ -474,5 +494,5 @@ FText AFootballController::PreviewAnimationText()const
     const auto& Labels=Saved&&Saved->Language==1?LabelsPl:LabelsEn;
     return FText::FromString(Labels.FindRef(Avatar->CurrentAnimation));
 }
-void AFootballController::BallControlOn(){if(Screen!=EScreen::Game||!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(!Mode||!Mode->HasBall(Avatar))return;BallControlHeld=true;if(!Sprint)Avatar->GetCharacterMovement()->MaxWalkSpeed=180;}
-void AFootballController::BallControlOff(){BallControlHeld=false;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=Sprint?765:510;}
+void AFootballController::BallControlOn(){if(Screen!=EScreen::Game||!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(!Mode||!Mode->HasBall(Avatar))return;BallControlHeld=true;if(!Sprint)Avatar->GetCharacterMovement()->MaxWalkSpeed=190;}
+void AFootballController::BallControlOff(){BallControlHeld=false;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=Sprint?765:500;}

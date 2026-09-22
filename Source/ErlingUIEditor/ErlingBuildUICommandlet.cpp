@@ -151,6 +151,48 @@ public:
         if(!Mouse) Text(C,TEXT(""),Key,Key==TEXT("SPACE")?TEXT("SPACJA"):Key,X,6,KeyW,27,13,White,true,true);
         Text(C,TEXT(""),En,Pl,X+KeyW+12,6,W-KeyW-12,30,15,White);
     }
+    void UpdateHUD()
+    {
+        // Preserve all other Designer edits when updating an existing interface.
+        if(auto* Goals=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GoalsPanel"))))
+            if(auto* Slot=Cast<UCanvasPanelSlot>(Goals->GetChildAt(0)->Slot))
+            { Slot->SetPosition(FVector2D(-20,-10)); Slot->SetSize(FVector2D(396,110)); }
+        if(auto* Hints=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("ControlHints"))))
+            for(UWidget* Child:Hints->GetAllChildren())
+                if(auto* I=Cast<UImage>(Child))
+                    if(I->GetBrush().GetResourceObject() && I->GetBrush().GetResourceObject()->GetName()==TEXT("T_UI_Keycap_Wide_Normal"))
+                        if(auto* Slot=Cast<UCanvasPanelSlot>(I->Slot))
+                            if(Slot->GetSize().Y<60)
+                            { Slot->SetPosition(Slot->GetPosition()+FVector2D(-8,-7)); Slot->SetSize(Slot->GetSize()+FVector2D(16,14)); }
+        if(!Tree->FindWidget(TEXT("PlayerShotPanel")))
+            if(auto* HUD=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GameHUD"))))
+            {
+                auto* Shot=Panel(HUD,TEXT("PlayerShotPanel"),0,0,150,26);
+                auto* Bar=Make<UProgressBar>(TEXT("PlayerShotFill"));
+                FProgressBarStyle Style;
+                Style.SetBackgroundImage(Brush(TEXT("T_UI_Slider_Track"))).SetFillImage(Brush(TEXT("T_UI_Slider_Fill_White")));
+                Bar->SetWidgetStyle(Style); Bar->SetFillColorAndOpacity(Pink);
+                At(Shot,Bar,10,9,130,8);
+                Shot->SetVisibility(ESlateVisibility::Collapsed);
+            }
+    }
+    bool UpdateCharacterHint()
+    {
+        TArray<UWidget*> Widgets;Tree->GetAllWidgets(Widgets);
+        for(UWidget* Widget:Widgets)
+            if(auto* Label=Cast<UErlingUIText>(Widget);Label&&Label->English.ToString().StartsWith(TEXT("Drag to rotate")))
+                if(auto* Parent=Cast<UCanvasPanel>(Label->GetParent()))
+                    for(UWidget* Child:Parent->GetAllChildren())
+                        if(auto* Image=Cast<UImage>(Child);Image&&Image->GetBrush().GetResourceObject()&&Image->GetBrush().GetResourceObject()->GetName()==TEXT("T_UI_Panel_Dark"))
+                            if(auto* Back=Cast<UCanvasPanelSlot>(Image->Slot);Back&&Back->GetPosition().Y>1000)
+                            {
+                                Back->SetPosition(FVector2D(1062,1017));Back->SetSize(FVector2D(660,53));
+                                auto* TextSlot=CastChecked<UCanvasPanelSlot>(Label->Slot);
+                                TextSlot->SetPosition(FVector2D(1082,1031));TextSlot->SetSize(FVector2D(620,30));
+                                return true;
+                            }
+        UE_LOG(LogTemp,Error,TEXT("Character hint widgets not found; interface left intact"));return false;
+    }
     void Build()
     {
         auto* Scale=Make<UScaleBox>(TEXT("ResponsiveScale")); Scale->SetStretch(EStretch::ScaleToFit); Tree->RootWidget=Scale;
@@ -193,8 +235,8 @@ public:
         Arrow(Character,TEXT("PreviewNext"),EErlingUIAction::PreviewNext,0,660,756,true);
         Button(Character,TEXT("CharacterBackButton"),EErlingUIAction::Back,TEXT("Back"),TEXT("Wstecz"),TEXT("T_UI_Icon_ArrowLeft_White"),36,842,298,74);
         Button(Pages[1],TEXT("SaveAppearanceButton"),EErlingUIAction::SaveAppearance,TEXT("Save appearance"),TEXT("Zapisz wygląd"),TEXT(""),1502,928,350,82,true);
-        Image(Pages[1],TEXT("T_UI_Panel_Dark"),990,1024,800,42,.8f);
-        Text(Pages[1],TEXT(""),TEXT("Drag to rotate  ·  Scroll to zoom"),TEXT("Przeciągnij, aby obrócić  ·  Kółko myszy: zoom"),912,1026,920,36,16,Muted,false,true);
+        Image(Pages[1],TEXT("T_UI_Panel_Dark"),1062,1017,660,53,.8f);
+        Text(Pages[1],TEXT(""),TEXT("Drag to rotate  ·  Scroll to zoom"),TEXT("Przeciągnij, aby obrócić  ·  Kółko myszy: zoom"),1082,1031,620,30,16,Muted,false,true);
 
         auto* Goals=Canvas(Pages[2],TEXT("GoalsPanel"),782,32,356,90);
         Image(Goals,TEXT("T_UI_HUD_Goals_Backplate"),0,0,356,90);
@@ -247,6 +289,7 @@ public:
         Text(Toast,TEXT("ToastValue"),TEXT(""),TEXT(""),72,21,728,38,18,White);
         Toast->SetVisibility(ESlateVisibility::Collapsed);
         Switch->SetActiveWidgetIndex(0);
+        UpdateHUD();
     }
 };
 }
@@ -257,7 +300,11 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
 {
     const FString PackageName=TEXT("/Game/Erling/UI/WBP_ErlingInterface");
     UWidgetBlueprint* Blueprint=FPackageName::DoesPackageExist(PackageName)?LoadObject<UWidgetBlueprint>(nullptr,*(PackageName+TEXT(".WBP_ErlingInterface"))):nullptr;
-    if (Blueprint && !FParse::Param(*Params,TEXT("Replace"))) { UE_LOG(LogTemp,Error,TEXT("Designer asset exists. Refusing to overwrite; archive it and use -Replace explicitly."));return 1; }
+    const bool UpdateHUD=FParse::Param(*Params,TEXT("UpdateHUD"));
+    const bool UpdateHint=FParse::Param(*Params,TEXT("UpdateCharacterHint"));
+    const bool PartialUpdate=UpdateHUD||UpdateHint;
+    if(PartialUpdate && (!Blueprint || !Blueprint->WidgetTree)) { UE_LOG(LogTemp,Error,TEXT("Partial update requires an existing interface."));return 1; }
+    if (Blueprint && !PartialUpdate && !FParse::Param(*Params,TEXT("Replace"))) { UE_LOG(LogTemp,Error,TEXT("Designer asset exists. Refusing to overwrite; archive it and use -Replace explicitly."));return 1; }
     FString ManifestPath;
     if(!FParse::Value(*Params,TEXT("Manifest="),ManifestPath)) { UE_LOG(LogTemp,Error,TEXT("Pass -Manifest=<asset_manifest.json>"));return 1; }
     FString Json;TSharedPtr<FJsonObject> Manifest;
@@ -268,11 +315,13 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
         Blueprint=CastChecked<UWidgetBlueprint>(Factory->FactoryCreateNew(UWidgetBlueprint::StaticClass(),CreatePackage(*PackageName),TEXT("WBP_ErlingInterface"),RF_Public|RF_Standalone,nullptr,GWarn));
         FAssetRegistryModule::AssetCreated(Blueprint);
     }
-    else if(Blueprint->WidgetTree) Blueprint->WidgetTree->Rename(nullptr,GetTransientPackage(),REN_DontCreateRedirectors|REN_NonTransactional);
-    Blueprint->WidgetTree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
+    else if(!PartialUpdate && Blueprint->WidgetTree) Blueprint->WidgetTree->Rename(nullptr,GetTransientPackage(),REN_DontCreateRedirectors|REN_NonTransactional);
+    if(!PartialUpdate || !Blueprint->WidgetTree) Blueprint->WidgetTree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
     ErlingUIAuthoring::FLayout Layout(Blueprint->WidgetTree);
     for(auto Value:Manifest->GetArrayField(TEXT("assets"))) Layout.Assets.Add(Value->AsObject()->GetStringField(TEXT("name")),Value->AsObject());
-    Layout.Build();if(Layout.Missing) return 1;
+    if(UpdateHint) { if(!Layout.UpdateCharacterHint()) return 1; }
+    else if(UpdateHUD) Layout.UpdateHUD(); else Layout.Build();
+    if(Layout.Missing) return 1;
     TArray<UWidget*> DesignerWidgets;Blueprint->WidgetTree->GetAllWidgets(DesignerWidgets);
     for(UWidget* Widget:DesignerWidgets) if(!Blueprint->WidgetVariableNameToGuidMap.Contains(Widget->GetFName())) Blueprint->OnVariableAdded(Widget->GetFName());
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);

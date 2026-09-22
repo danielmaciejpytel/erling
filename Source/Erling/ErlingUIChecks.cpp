@@ -56,6 +56,17 @@ void UErlingInterface::RunUIChecks()
         Check(Name,Valid&&Count>0);
     };
     using S=AFootballController::EScreen;
+    // Optional fixed-pose visual evidence for both collar sides after clothing edits.
+    if(FParse::Param(FCommandLine::Get(),TEXT("CollarReview"))&&CheckStage>=24&&CheckStage<=29)
+    {
+        if(CheckStage==24){C->ChangeScreen(S::Editor);C->EditorZoom=1;C->Avatar->PreviewAnimation=true;C->Avatar->SetAnimation(TEXT("Idle_WeightShift"));C->Avatar->PlaybackRate=0;C->Avatar->AnimationTime=1.f;}
+        if(CheckStage==25)Shot(TEXT("12_Collar_Left"));
+        if(CheckStage==26)C->Avatar->AnimationTime=3.f;
+        if(CheckStage==27)Shot(TEXT("13_Collar_Right"));
+        if(CheckStage==28)C->Avatar->SetActorRotation(FRotator(0,145,0));
+        if(CheckStage==29)Shot(TEXT("14_Collar_Back"));
+        ++CheckStage;NextCheck=Now+1.1;return;
+    }
     switch(CheckStage)
     {
     case 0:{int32 Width=1920,Height=1080;FParse::Value(FCommandLine::Get(),TEXT("ResX="),Width);FParse::Value(FCommandLine::Get(),TEXT("ResY="),Height);C->ConsoleCommand(FString::Printf(TEXT("r.SetRes %dx%dw"),Width,Height));}C->Saved->Language=1;C->Saved->PauseInSettings=false;C->Saved->Appearance={1,0,1,1,1};C->Selection=C->Saved->Appearance;C->Avatar->ApplyKit(C->Selection,C->Catalog);C->ChangeScreen(S::Main);RefreshScreen();Check(TEXT("designer_blueprint"),GetClass()->GetPathName().Contains(TEXT("WBP_ErlingInterface_C")));Check(TEXT("six_pages"),ScreenSwitcher&&ScreenSwitcher->GetNumWidgets()==6);break;
