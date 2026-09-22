@@ -105,8 +105,8 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
             const auto* SprintController=Cast<AFootballController>(P->GetController());
             const float Now=P->GetWorld()->GetTimeSeconds();
             // Releasing sprint does not cancel the physical recovery of its last touch.
-            const bool RecoverWhileSteering=!Mode->PossessionActive&&!RawInputDirection.IsNearlyZero();
-            const bool SprintReleaseChase=SprintController&&(SprintController->Sprint||RecoverWhileSteering)&&!Mode->BallStopRequested&&!Mode->BallStopped&&!Mode->ShotInFlight&&!Mode->SprintKickPending&&Now>=Mode->SprintContactUntil&&Mode->IsRecoverableSprintTouch(P);
+            const bool RecoverWhileSteering=!Mode->Possession->PossessionActive&&!RawInputDirection.IsNearlyZero();
+            const bool SprintReleaseChase=SprintController&&(SprintController->Sprint||RecoverWhileSteering)&&!Mode->Possession->BallStopRequested&&!Mode->Possession->BallStopped&&!Mode->ShotInFlight&&!Mode->Possession->SprintKickPending&&Now>=Mode->Possession->SprintContactUntil&&Mode->IsRecoverableSprintTouch(P);
             if(SprintReleaseChase)
             {
                 FVector Gap=Mode->Ball->GetComponentLocation()-CharacterOwner->GetActorLocation();
@@ -124,7 +124,7 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
                         const float TargetSpeed=FMath::Max(Speed,765.f);
                         const float NewSpeed=FMath::FInterpTo(Speed,FMath::Min(TargetSpeed,765.f),Dt,12.f);
                         Velocity.X=ChaseDirection.X*NewSpeed;Velocity.Y=ChaseDirection.Y*NewSpeed;
-                        Mode->DribbleDirection=ChaseDirection;
+                        Mode->Possession->DribbleDirection=ChaseDirection;
                         LastMoveInputDirection=ChaseDirection;
                     }
                     Acceleration=FVector::ZeroVector;
@@ -147,19 +147,19 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
     }
     if(const auto* P=Cast<AFootballPlayer>(CharacterOwner);P&&RawInputDirection.IsNearlyZero())
     {
-        if(const auto* Mode=P->GetWorld()?P->GetWorld()->GetAuthGameMode<AFootballMode>():nullptr;Mode&&Mode->BallStopRequested&&!Mode->BallStopped&&!Mode->SprintReleaseDirection.IsNearlyZero()&&Mode->Ball&&Speed>120.f)
+        if(const auto* Mode=P->GetWorld()?P->GetWorld()->GetAuthGameMode<AFootballMode>():nullptr;Mode&&Mode->Possession->BallStopRequested&&!Mode->Possession->BallStopped&&!Mode->Possession->SprintReleaseDirection.IsNearlyZero()&&Mode->Ball&&Speed>120.f)
         {
             const FVector Gap=Mode->Ball->GetComponentLocation()-CharacterOwner->GetActorLocation();
-            const FVector RecoveryDirection=Mode->LastPossessionDirection.GetSafeNormal2D();
+            const FVector RecoveryDirection=Mode->Possession->LastPossessionDirection.GetSafeNormal2D();
             const float Ahead=FVector::DotProduct(Gap,RecoveryDirection),GapDistance=Gap.Size2D();
-            const float RecoveryAge=P->GetWorld()->GetTimeSeconds()-Mode->BallStopStarted;
+            const float RecoveryAge=P->GetWorld()->GetTimeSeconds()-Mode->Possession->BallStopStarted;
             const bool BallAtPlayableHeight=Gap.Z<=-35.f;
-            if(!RecoveryDirection.IsNearlyZero()&&BallAtPlayableHeight&&Ahead>20.f&&!Mode->PossessionActive&&GapDistance>48.f&&GapDistance<420.f&&RecoveryAge<1.35f)
+            if(!RecoveryDirection.IsNearlyZero()&&BallAtPlayableHeight&&Ahead>20.f&&!Mode->Possession->PossessionActive&&GapDistance>48.f&&GapDistance<420.f&&RecoveryAge<1.35f)
             {
                 // Keep the runner physically committed to the sprint touch for a few
                 // recovery steps. The ball remains free; the player catches it instead
                 // of an invisible leash pulling it backwards.
-                const bool StillReleased=P->GetWorld()->GetTimeSeconds()<Mode->SprintReleaseUntil;
+                const bool StillReleased=P->GetWorld()->GetTimeSeconds()<Mode->Possession->SprintReleaseUntil;
                 const float TargetSpeed=StillReleased?FMath::Max(Speed,720.f):(GapDistance>145.f?745.f:590.f);
                 const float NewSpeed=FMath::FInterpTo(Speed,FMath::Min(TargetSpeed,765.f),Dt,10.f);
                 Velocity.X=RecoveryDirection.X*NewSpeed;Velocity.Y=RecoveryDirection.Y*NewSpeed;
@@ -174,7 +174,7 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
         {
             if(Mode->HasDribbleControl(P))
             {
-            const FVector LimitedDirection=Mode->DribbleDirection.GetSafeNormal2D();
+            const FVector LimitedDirection=Mode->Possession->DribbleDirection.GetSafeNormal2D();
             if(!LimitedDirection.IsNearlyZero())
             {
                 const float AccelSize=Acceleration.Size2D();
@@ -189,7 +189,7 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
                 // momentum first while the limited dribble heading rotates toward input.
                 const auto* PC=Cast<AFootballController>(P->GetController());
                 const bool Sprinting=PC&&PC->Sprint;
-                if(Sprinting&&Mode->PossessionActive&&RawAgainstMomentum<.3f)
+                if(Sprinting&&Mode->Possession->PossessionActive&&RawAgainstMomentum<.3f)
                 {
                     // Plant before reversing: shorten the player's arc, never redirect
                     // the free ball. The release chase above always has priority.

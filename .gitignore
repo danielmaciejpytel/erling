@@ -118,3 +118,4 @@ Source/ErlingUIEditor/UI_EDITING.md
 # Session-only Unreal/Blender helper scripts
 /Source/ErlingUIEditor/Python/
 /Source/ErlingUIEditor/*.cjs
+.clang-format

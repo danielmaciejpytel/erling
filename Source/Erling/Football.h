@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/SaveGame.h"
+#include "ErlingBallPossession.h"
 #include "Football.generated.h"
 
 class UStaticMeshComponent; class USkeletalMeshComponent; class UMaterialInstanceDynamic; class UAnimSequence; class ACameraActor; class UErlingInterface;
@@ -61,21 +62,16 @@ public:
  UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
  void CreateNetCollision(); void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
  int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
- FName SprintDribbleFoot=NAME_None,SprintLeadFoot=NAME_None,CarryDribbleFoot=NAME_None;
- float SprintContactUntil=0,SprintReleaseUntil=0,SprintNextTouchAt=0,DribbleMinFootClearance=MAX_flt;
- float SprintDribbleMinDistance=MAX_flt,SprintDribbleMaxDistance=0,DribbleMinBodyAhead=MAX_flt,DribbleMinDirectionAhead=MAX_flt;
- float CarryFootLockUntil=0;
- float BallStopStarted=0;
- FVector DribbleDirection=FVector::ZeroVector,SprintReleaseDirection=FVector::ZeroVector,LastPossessionDirection=FVector::ForwardVector,BallStopAnchor=FVector::ZeroVector;
- FName BallStopFoot=NAME_None;
- bool SprintKickPending=false,PossessionActive=false,HadControlInput=false,BallStopRequested=false,BallStopped=false,BallStopGesturePlayed=false,LastPossessionWasDigital=false; int32 SprintDribbleTouchCount=0,CarryFootSwitchCount=0;
- void Dribble(AFootballPlayer* Player,float Dt);
+ /** Possession / dribbling state and logic (see ErlingBallPossession.h). */
+ UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingBallPossession> Possession;
+ void Dribble(AFootballPlayer* Player,float Dt){Possession->Dribble(Player,Dt);}
  UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FinishedBalls;
  void PreserveFinishedBall();
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
- bool HasBall(const AFootballPlayer* Player)const; bool HasDribbleControl(const AFootballPlayer* Player)const;
- bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=420.f)const;
- void ClearSprintReleaseRecovery();
+ bool HasBall(const AFootballPlayer* Player)const{return Possession->HasBall(Player);}
+ bool HasDribbleControl(const AFootballPlayer* Player)const{return Possession->HasDribbleControl(Player);}
+ bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=ErlingPossession::RecoveryAbandonDistance)const{return Possession->IsRecoverableSprintTouch(Player,MaxGap);}
+ void ClearSprintReleaseRecovery(){Possession->ClearSprintReleaseRecovery();}
  bool LaunchShot(AFootballPlayer* Player,const FVector& Velocity,bool CommittedShot=false);
  TWeakObjectPtr<AFootballPlayer> LastShooter;
  UStaticMeshComponent* Box(const FVector& P,const FVector& Size,const FLinearColor& Color,bool Collision=true);
@@ -115,7 +111,10 @@ public:
  int32 PreviewIndex=-1; void CycleAnimationPreview(int32 Direction); FText PreviewAnimationText()const;
  bool BallControlHeld=false; void BallControlOn(); void BallControlOff();
  bool HasDigitalMoveIntent()const; FVector GetMoveIntentWorld()const;
- void RunChecks(); int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false;
+ #if !UE_BUILD_SHIPPING
+ void RunChecks(); bool bRunLatestChecks=false; bool bRunProjectChecks=false;
+ #endif
+ int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
  UPROPERTY(Transient) TObjectPtr<UErlingInterface> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
  FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
@@ -134,5 +133,8 @@ public:
  FString Localize(const TCHAR* English,const TCHAR* Polish) const;
  FString LocalizeCatalogLabel(const FString& Value) const;
  FText OptionText(int32 Index) const;
- void RunProjectChecks(); int32 TestStage=0; double TestStarted=0; FString TestReport; FVector TestPosition; bool TestJumpObserved=false;
+ #if !UE_BUILD_SHIPPING
+ void RunProjectChecks();
+ #endif
+ int32 TestStage=0; double TestStarted=0; FString TestReport; FVector TestPosition; bool TestJumpObserved=false;
 };
