@@ -48,7 +48,7 @@ AFootballPlayer::AFootballPlayer(const FObjectInitializer& ObjectInitializer) : 
  GetMesh()->SetRelativeLocation(FVector(0,0,-96));GetMesh()->SetRelativeRotation(FRotator(0,-90,0));GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
  GetMesh()->SetForcedLOD(1);GetMesh()->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
  Face=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Face"));Face->SetupAttachment(GetMesh());Face->SetRelativeLocation(FVector(0,.065871f,0));Face->SetCastShadow(false);Face->SetCollisionEnabled(ECollisionEnabled::NoCollision);
- GetCharacterMovement()->MaxWalkSpeed=510;GetCharacterMovement()->bEnablePhysicsInteraction=false;GetCharacterMovement()->JumpZVelocity=420;GetCharacterMovement()->GravityScale=1.4f;GetCharacterMovement()->MaxAcceleration=1400;GetCharacterMovement()->BrakingDecelerationWalking=1800;GetCharacterMovement()->bOrientRotationToMovement=true;GetCharacterMovement()->RotationRate=FRotator(0,520,0);bUseControllerRotationYaw=false;
+ GetCharacterMovement()->MaxWalkSpeed=500;GetCharacterMovement()->bEnablePhysicsInteraction=false;GetCharacterMovement()->JumpZVelocity=420;GetCharacterMovement()->GravityScale=1.4f;GetCharacterMovement()->MaxAcceleration=1400;GetCharacterMovement()->BrakingDecelerationWalking=1800;GetCharacterMovement()->bOrientRotationToMovement=true;GetCharacterMovement()->RotationRate=FRotator(0,520,0);bUseControllerRotationYaw=false;
 }
 void AFootballPlayer::BeginPlay() { Super::BeginPlay();InitializeAssets(); }
 void AFootballPlayer::InitializeAssets() {
@@ -57,7 +57,7 @@ void AFootballPlayer::InitializeAssets() {
  ConfigurePiece(GetMesh());
  if(!Face->GetSkeletalMeshAsset())Face->SetSkeletalMesh(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Erling/Meshes/SK_face.SK_face")));
  Face->SetRelativeLocation(FVector::ZeroVector);ConfigurePiece(Face);
- if(!FaceMaterial){if(auto M=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Erling/Materials/M_Face.M_Face"))){FaceMaterial=UMaterialInstanceDynamic::Create(M,this);Face->SetMaterial(0,FaceMaterial);}}
+ if(!FaceMaterial){if(auto M=LoadObject<UMaterialInterface>(nullptr,GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))?TEXT("/Game/Erling/ArtDirection/M_Face.M_Face"):TEXT("/Game/Erling/Materials/M_Face.M_Face"))){FaceMaterial=UMaterialInstanceDynamic::Create(M,this);Face->SetMaterial(0,FaceMaterial);}}
  for(auto N:{TEXT("Idle_Breathe"),TEXT("Idle_LookAround"),TEXT("Idle_WeightShift"),TEXT("Walk"),TEXT("Run"),TEXT("Sprint"),TEXT("Kick_Right"),TEXT("Kick_Left"),TEXT("Jump"),TEXT("Jump_Run"),TEXT("JoyJump_Run"),TEXT("JoyJump_Standing"),TEXT("Shot_Flip_Land"),TEXT("Slide_From_Run"),TEXT("Trip_Roll_From_Run"),TEXT("Celebrate_Victory"),TEXT("Dance_Disco"),TEXT("Dance_Robot"),TEXT("Fall_Backward"),TEXT("GetUp_Back"),TEXT("GetUp_Front"),TEXT("Meme_RageStomp"),TEXT("Meme_Shrug"),TEXT("Turn_Step")}) {
   const FString AssetName=FString(TEXT("AN_"))+N;FString Path=FString::Printf(TEXT("/Game/Erling/Animations/%s.%s"),*AssetName,*AssetName);if(auto A=LoadObject<UAnimSequence>(nullptr,*Path))Animations.Add(N,A);else UE_LOG(LogTemp,Error,TEXT("Missing animation %s"),N);
  }
@@ -113,10 +113,11 @@ void AFootballMode::CreateField() {
  GetWorld()->SpawnActor<ASkyAtmosphere>();
 }
 void AFootballMode::BeginPlay(){Super::BeginPlay();CreateField();CreateNetCollision();Box(FVector(0,0,-55),FVector(20000,20000,100),FLinearColor(.04f,.18f,.08f));GoalSound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Erling/Audio/goal.goal"));auto A=GetWorld()->SpawnActor<AStaticMeshActor>(FVector(0,0,40),FRotator::ZeroRotator);Ball=A->GetStaticMeshComponent();Ball->SetMobility(EComponentMobility::Movable);Ball->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));Ball->SetWorldScale3D(FVector(.44));Ball->SetCollisionProfileName(TEXT("PhysicsActor"));Ball->SetCollisionResponseToChannel(ECC_Pawn,ECR_Ignore);Ball->SetSimulatePhysics(true);Ball->SetMassOverrideInKg(NAME_None,.43f);Ball->SetLinearDamping(.3f);Ball->SetAngularDamping(.2f);Ball->BodyInstance.bUseCCD=true;Ball->SetNotifyRigidBodyCollision(true);Ball->OnComponentHit.AddDynamic(this,&AFootballMode::NetHit);
- auto Dome=GetWorld()->SpawnActor<AStaticMeshActor>();Dome->SetActorEnableCollision(false);auto DC=Dome->GetStaticMeshComponent();DC->SetMobility(EComponentMobility::Movable);DC->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));DC->SetWorldScale3D(FVector(400));DC->SetCollisionEnabled(ECollisionEnabled::NoCollision);DC->SetCastShadow(false);DC->SetMaterial(0,LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Erling/Materials/M_Sky.M_Sky")));
- if(auto M=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))Ball->SetMaterial(0,M);
+ if(!GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))){auto Dome=GetWorld()->SpawnActor<AStaticMeshActor>();Dome->SetActorEnableCollision(false);auto DC=Dome->GetStaticMeshComponent();DC->SetMobility(EComponentMobility::Movable);DC->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));DC->SetWorldScale3D(FVector(400));DC->SetCollisionEnabled(ECollisionEnabled::NoCollision);DC->SetCastShadow(false);DC->SetMaterial(0,LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Erling/Materials/M_Sky.M_Sky")));}
+ if(auto M=LoadObject<UMaterialInterface>(nullptr,GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))?TEXT("/Game/Erling/ArtDirection/M_Ball.M_Ball"):TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))Ball->SetMaterial(0,M);
+ if(GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))){Ball->SetRenderCustomDepth(true);Ball->SetCustomDepthStencilValue(1);}
  auto PM=NewObject<UPhysicalMaterial>(this);PM->Restitution=.22f;PM->Friction=.45f;Ball->SetPhysMaterialOverride(PM);ResetBall();}
-void AFootballMode::ResetBall(){if(!Ball)return;LastShooter.Reset();BallHidden=false;ShotInFlight=false;SprintDribbleFoot=NAME_None;SprintLeadFoot=NAME_None;CarryDribbleFoot=NAME_None;BallStopFoot=NAME_None;SprintContactUntil=0;SprintReleaseUntil=0;SprintNextTouchAt=0;CarryFootLockUntil=0;BallStopStarted=0;SprintKickPending=false;SprintDribbleTouchCount=0;CarryFootSwitchCount=0;DribbleDirection=FVector::ZeroVector;SprintReleaseDirection=FVector::ZeroVector;LastPossessionDirection=FVector::ForwardVector;BallStopAnchor=FVector::ZeroVector;PossessionActive=false;HadControlInput=false;BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;LastPossessionWasDigital=false;DribbleMinFootClearance=MAX_flt;SprintDribbleMinDistance=MAX_flt;SprintDribbleMaxDistance=0;DribbleMinBodyAhead=MAX_flt;DribbleMinDirectionAhead=MAX_flt;if(auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController());PC&&PC->Avatar)PC->Avatar->CancelBallTrap();Ball->SetVisibility(true);Ball->SetSimulatePhysics(true);Ball->SetLinearDamping(.3f);Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);Ball->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);Ball->SetWorldLocation(FVector(0,0,28),false,nullptr,ETeleportType::TeleportPhysics);Scored=false;ResetAt=0;PreviousBall=Ball->GetComponentLocation();}
+void AFootballMode::ResetBall(){if(!Ball)return;if(Scored||BallHidden||ShotInFlight)PreserveFinishedBall();LastShooter.Reset();BallHidden=false;ShotInFlight=false;SprintDribbleFoot=NAME_None;SprintLeadFoot=NAME_None;CarryDribbleFoot=NAME_None;BallStopFoot=NAME_None;SprintContactUntil=0;SprintReleaseUntil=0;SprintNextTouchAt=0;CarryFootLockUntil=0;BallStopStarted=0;SprintKickPending=false;SprintDribbleTouchCount=0;CarryFootSwitchCount=0;DribbleDirection=FVector::ZeroVector;SprintReleaseDirection=FVector::ZeroVector;LastPossessionDirection=FVector::ForwardVector;BallStopAnchor=FVector::ZeroVector;PossessionActive=false;HadControlInput=false;BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;LastPossessionWasDigital=false;DribbleMinFootClearance=MAX_flt;SprintDribbleMinDistance=MAX_flt;SprintDribbleMaxDistance=0;DribbleMinBodyAhead=MAX_flt;DribbleMinDirectionAhead=MAX_flt;if(auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController());PC&&PC->Avatar)PC->Avatar->CancelBallTrap();Ball->SetVisibility(true);Ball->SetSimulatePhysics(true);Ball->SetLinearDamping(.3f);Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);Ball->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);Ball->SetWorldLocation(FVector(0,0,28),false,nullptr,ETeleportType::TeleportPhysics);Scored=false;ResetAt=0;PreviousBall=Ball->GetComponentLocation();}
 FVector AFootballMode::ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds){
  FVector F=Direction.GetSafeNormal2D();float C=FMath::Clamp(Seconds*2.f,0.f,3.f);float Speed=C<=1?FMath::Lerp(850.f,2200.f,C):C<=2?FMath::Lerp(2200.f,2800.f,C-1):FMath::Lerp(2800.f,3200.f,C-2);
  if(C<.15f)return F*Speed;
@@ -125,7 +126,7 @@ FVector AFootballMode::ShotVelocity(const FVector& Position,const FVector& Direc
  float T=Distance/Speed;float Z=FMath::Clamp((GoalHeight-Position.Z+.5f*980*T*T)/T,0.f,1300.f);return F*Speed+FVector(0,0,Z);
 }
 void AFootballMode::Kick(AFootballPlayer* P,float Seconds){if(!Ball||!P||BallHidden||Scored||FVector::Dist2D(Ball->GetComponentLocation(),P->GetActorLocation())>240)return;LastShooter=P;LastShot=GetWorld()->GetTimeSeconds();ShotInFlight=true;Ball->SetLinearDamping(.015f);Ball->SetPhysicsLinearVelocity(ShotVelocity(Ball->GetComponentLocation(),P->GetActorForwardVector(),Seconds));if(auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController()))PC->PlayEffect(TEXT("kick"));}
-void AFootballMode::HideMiss(){if(BallHidden)return;if(auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController()))PC->PlayEffect(TEXT("fail"));BallHidden=true;Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);Ball->SetVisibility(false);Ball->SetSimulatePhysics(false);ResetAt=GetWorld()->GetTimeSeconds()+1.2f;}
+void AFootballMode::HideMiss(){if(BallHidden)return;if(auto PC=Cast<AFootballController>(GetWorld()->GetFirstPlayerController()))PC->PlayEffect(TEXT("fail"));BallHidden=true;Ball->SetLinearDamping(1.2f);ResetAt=GetWorld()->GetTimeSeconds()+1.2f;}
 void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  if(!Player||Player->IsMovementLocked()||Scored||BallHidden||GetWorld()->GetTimeSeconds()-LastShot<.85f||Player->GetCharacterMovement()->IsFalling())return;
  const float Now=GetWorld()->GetTimeSeconds();
@@ -142,7 +143,7 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
    const FVector RightFoot=Player->GetMesh()->GetSocketLocation(TEXT("foot_r"));
    PendingFootContact=FMath::Min(FVector::Dist2D(Pos,LeftFoot),FVector::Dist2D(Pos,RightFoot))<=104.f;
   }
-  if(!PendingFootContact)ClearSprintReleaseRecovery();
+  if(!PendingFootContact){PossessionActive=false;ClearSprintReleaseRecovery();}
  }
  if(!SprintReleaseDirection.IsNearlyZero()&&!SprintKickPending&&Now>=SprintContactUntil&&!IsRecoverableSprintTouch(Player))
  {
@@ -180,7 +181,6 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
   }
  }
  const bool ControlledEnvelope=HasDribbleControl(Player);
- if(ControlledEnvelope)PossessionActive=true;
  if(HasControlInput)
  {
   BallStopRequested=false;BallStopped=false;BallStopGesturePlayed=false;BallStopFoot=NAME_None;BallStopAnchor=FVector::ZeroVector;Player->CancelBallTrap();
@@ -192,7 +192,8 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  }
  HadControlInput=HasControlInput;
  const float SpeedAlpha=FMath::Clamp((Speed-180.f)/(765.f-180.f),0.f,1.f);
- const float PossessionTurnRate=BallControl?720.f:FMath::Lerp(480.f,200.f,SpeedAlpha);
+ const bool SprintReversal=PC&&PC->Sprint&&PossessionActive&&TurnAmount>.35f;
+ const float PossessionTurnRate=BallControl?660.f:FMath::Max(FMath::Lerp(480.f,200.f,SpeedAlpha),SprintReversal?420.f:0.f);
  if(DribbleDirection.IsNearlyZero())DribbleDirection=!VelocityDirection.IsNearlyZero()?VelocityDirection:!LastPossessionDirection.IsNearlyZero()?LastPossessionDirection:Player->GetActorForwardVector();
  if(HasControlInput&&!DesiredDirection.IsNearlyZero())
  {
@@ -204,6 +205,22 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  if(!BallStopRequested&&!BallStopped&&!Direction.IsNearlyZero()&&ControlledEnvelope)LastPossessionDirection=Direction;
  if(Direction.IsNearlyZero())Direction=LastPossessionDirection.GetSafeNormal2D();
  if(Direction.IsNearlyZero()||(!BallControl&&!ControlledEnvelope&&FVector::DotProduct(To.GetSafeNormal(),Direction)<-.25f))return;
+ // The broad control envelope is useful for movement/recovery, but is not a
+ // physical touch. A loose ball, including an expired sprint release, cannot be
+ // steered toward a carry anchor until the runner actually reaches it.
+ const bool ContactFeet=Player->GetMesh()&&Player->GetMesh()->DoesSocketExist(TEXT("foot_l"))&&Player->GetMesh()->DoesSocketExist(TEXT("foot_r"));
+ const float ContactDistance=ContactFeet?FMath::Min(FVector::Dist2D(Pos,Player->GetMesh()->GetSocketLocation(TEXT("foot_l"))),FVector::Dist2D(Pos,Player->GetMesh()->GetSocketLocation(TEXT("foot_r")))):To.Size2D();
+ const bool ReleasedTouch=!SprintReleaseDirection.IsNearlyZero()&&!SprintKickPending&&Now>=SprintContactUntil&&!(PossessionActive&&BallStopFoot!=NAME_None);
+ const bool PhysicalContact=ContactDistance<=(ContactFeet?(ReleasedTouch?52.f:48.f):70.f);
+ if(Sprinting&&ContactFeet){SprintDribbleMinDistance=FMath::Min(SprintDribbleMinDistance,To.Size2D());SprintDribbleMaxDistance=FMath::Max(SprintDribbleMaxDistance,To.Size2D());}
+ if((!PossessionActive||ReleasedTouch||To.Size2D()>150.f)&&!PhysicalContact)
+ {
+  PossessionActive=false;CarryDribbleFoot=NAME_None;CarryFootLockUntil=0.f;
+  // Rolling resistance slows a released ball; it never recalls or redirects it.
+  if(ReleasedTouch)Ball->SetLinearDamping(Now<SprintReleaseUntil?.08f:BallStopRequested?1.65f:.62f);
+  return;
+ }
+ PossessionActive=true;
  const FVector BodyForward=Player->GetActorForwardVector().GetSafeNormal2D();
  const FVector BodyRight=Player->GetActorRightVector().GetSafeNormal2D();
 
@@ -336,7 +353,6 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
  if(Sprinting&&HasFeet)
  {
   CarryDribbleFoot=NAME_None;CarryFootLockUntil=0;
-  SprintDribbleMinDistance=FMath::Min(SprintDribbleMinDistance,PlayerGap);SprintDribbleMaxDistance=FMath::Max(SprintDribbleMaxDistance,PlayerGap);
   const float LeftFootDistance=FVector::Dist2D(Pos,Left),RightFootDistance=FVector::Dist2D(Pos,Right);
   const FName NearestFoot=LeftFootDistance<=RightFootDistance?TEXT("foot_l"):TEXT("foot_r");
   const float NearestFootDistance=FMath::Min(LeftFootDistance,RightFootDistance);
@@ -375,7 +391,7 @@ void AFootballMode::Dribble(AFootballPlayer* Player,float Dt){
    V=AvoidFeet(V,Speed+180.f);
    Ball->SetLinearDamping(.35f);Ball->SetPhysicsLinearVelocity(V);Ball->SetPhysicsAngularVelocityInRadians(FVector(-V.Y/22,V.X/22,0));return;
   }
-  if(SprintKickPending&&Now>=SprintContactUntil){SprintKickPending=false;SprintReleaseUntil=Now+ReleaseDuration;SprintDribbleTouchCount++;SprintReleaseDirection=Direction;const float Along=FMath::Max(0.f,FVector::DotProduct(Player->GetVelocity(),SprintReleaseDirection));FVector V=SprintReleaseDirection*(Along+ReleasePush);V.Z=0;Ball->SetLinearDamping(.08f);Ball->SetPhysicsLinearVelocity(V);Ball->SetPhysicsAngularVelocityInRadians(FVector(-V.Y/22,V.X/22,0));return;}
+  if(SprintKickPending&&Now>=SprintContactUntil){SprintKickPending=false;PossessionActive=false;SprintReleaseUntil=Now+ReleaseDuration;SprintDribbleTouchCount++;SprintReleaseDirection=Direction;const float Along=FMath::Max(0.f,FVector::DotProduct(Player->GetVelocity(),SprintReleaseDirection));FVector V=SprintReleaseDirection*(Along+ReleasePush);V.Z=0;Ball->SetLinearDamping(.08f);Ball->SetPhysicsLinearVelocity(V);Ball->SetPhysicsAngularVelocityInRadians(FVector(-V.Y/22,V.X/22,0));return;}
   const bool ReleasedBallStillFar=!SprintReleaseDirection.IsNearlyZero()&&!SprintKickPending&&PlayerGap>125.f;
   if(ReleasedBallStillFar)
   {
@@ -476,7 +492,7 @@ void AFootballController::LookY(float V){if(Screen==EScreen::Game&&Saved&&Saved-
 void AFootballController::GamepadLookX(float V){if(Screen==EScreen::Game&&Saved&&Saved->CameraMode!=2&&!FMath::IsNearlyZero(V)){Yaw+=V*Saved->Sensitivity*120.f*GetWorld()->GetDeltaSeconds();if(Avatar&&FMath::Abs(FMath::FindDeltaAngleDegrees(Avatar->GetActorRotation().Yaw,Yaw))>65)Avatar->BeginTurn(Yaw);}}
 void AFootballController::GamepadLookY(float V){if(Screen==EScreen::Game&&Saved&&Saved->CameraMode!=2&&!FMath::IsNearlyZero(V))Pitch=FMath::Clamp(Pitch+V*Saved->Sensitivity*90.f*GetWorld()->GetDeltaSeconds(),-40.f,5.f);}
 void AFootballController::SprintOn(){if(Screen!=EScreen::Game)return;Sprint=true;if(Avatar)Avatar->GetCharacterMovement()->MaxWalkSpeed=765;}
-void AFootballController::SprintOff(){Sprint=false;if(!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(BallControlHeld&&(!Mode||!Mode->HasDribbleControl(Avatar)))BallControlHeld=false;Avatar->GetCharacterMovement()->MaxWalkSpeed=BallControlHeld?180:510;}
+void AFootballController::SprintOff(){Sprint=false;if(!Avatar)return;auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();if(BallControlHeld&&(!Mode||!Mode->HasDribbleControl(Avatar)))BallControlHeld=false;Avatar->GetCharacterMovement()->MaxWalkSpeed=BallControlHeld?190:500;}
 void AFootballController::StartCharge()
 {
  if(Screen!=EScreen::Game||!Avatar||!Avatar->CanAct()||GetWorld()->GetTimeSeconds()<KickCooldown)return;
@@ -587,7 +603,7 @@ void AFootballController::Reset(){if(Screen==EScreen::Game&&Avatar&&Avatar->IsMo
 void AFootballController::PauseToggle(){if(Screen==EScreen::Game)ChangeScreen(EScreen::Pause);else if(Screen==EScreen::Pause)ChangeScreen(EScreen::Game);else if(Screen==EScreen::Settings)ChangeScreen(SettingsReturn);else if(Screen==EScreen::Editor)BackFromEditor();else if(Screen==EScreen::Credits)ChangeScreen(EScreen::Main);}
 void AFootballController::ChangeScreen(EScreen Next){const auto Old=Screen;const bool ResumeFromSettings=Old==EScreen::Settings&&Next==SettingsReturn;BallControlOff();if(Avatar){Avatar->PreviewAnimation=false;PreviewIndex=-1;}Screen=Next;Charging=false;ShotChargeArmed=false;ShotBufferActive=false;ShotChargeAimDirection=FVector::ZeroVector;ShotBufferAimDirection=FVector::ZeroVector;GoalSpacePending=false;SpaceHeld=false;if((Next==EScreen::Editor||Next==EScreen::Main)&&!ResumeFromSettings){CancelPendingActions();if(Avatar){Avatar->ClearAction();Avatar->PhysicalJump=false;}GoalCelebrationUsed=true;}const bool PauseForSettings=Next==EScreen::Settings&&(SettingsReturn==EScreen::Pause||(Saved&&Saved->PauseInSettings));SetPause(Next==EScreen::Pause||PauseForSettings);SprintOff();
  if(Next==EScreen::Editor){EditorZoom=0;Dragging=false;DraftBefore=Selection;Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator(0,-35,0));Avatar->KickUntil=0;Avatar->SetAnimation(TEXT("Idle_Breathe"));Reset();}
- if(Next==EScreen::Game&&Old!=EScreen::Pause&&!ResumeFromSettings){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;PitchCameraLeadX=0;Reset();}
+ if(Next==EScreen::Game&&Old!=EScreen::Pause&&!ResumeFromSettings){CancelPendingActions();Avatar->ClearAction();Avatar->PhysicalJump=false;GoalCelebrationUsed=true;Avatar->SetActorLocation(FVector(-350,0,100));Avatar->SetActorRotation(FRotator::ZeroRotator);Yaw=0;Pitch=-15;KickCooldown=0;CameraPivotInitialized=false;PitchCameraLeadX=0;PitchViewInitialized=false;PitchShotTracking=false;PitchShotHoldRemaining=0.f;PitchShotOffset=FVector::ZeroVector;Reset();}
  if(Next==EScreen::Main&&Old!=EScreen::Credits&&!ResumeFromSettings){const float X=Avatar->GetActorLocation().X;DemoPhase=FMath::Abs(X)<240?4:0;DemoDirection=DemoPhase==4?(X>=0?1:-1):(X>0?-1:1);DemoShotTargetX=0.f;Reset();}bShowMouseCursor=Next!=EScreen::Game;if(bShowMouseCursor){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);}else{FInputModeGameOnly Mode;SetInputMode(Mode);}BuildUI();}
 void AFootballController::Cycle(int32 C,int32 Direction){if(!Catalog.IsValidIndex(C)||Catalog[C].Options.IsEmpty())return;Selection[C]=(Selection[C]+Direction+Catalog[C].Options.Num())%Catalog[C].Options.Num();Avatar->ApplyKit(Selection,Catalog);Toast.Empty();}
 void AFootballController::SaveAppearance(){Saved->Appearance=Selection;const bool Ok=UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);if(Ok)DraftBefore=Selection;Toast=Ok?Localize(TEXT("Appearance saved"),TEXT("Wygląd zapisany")):Localize(TEXT("Failed to save appearance"),TEXT("Nie udało się zapisać wyglądu"));ToastUntil=GetWorld()->GetTimeSeconds()+4;}
@@ -615,17 +631,20 @@ void AFootballController::Tick(float Dt){Super::Tick(Dt);
   const bool OnBall=ActiveScreen==EScreen::Game&&GameplayMode&&GameplayMode->HasDribbleControl(Avatar)&&Avatar->CanAct()&&!Charging;
   const float Now=GetWorld()->GetTimeSeconds();
   bool SprintReleaseLocked=false,SprintReleaseChase=false;FVector SprintChaseFacing=FVector::ZeroVector;
-  if(ActiveScreen==EScreen::Game&&GameplayMode&&GameplayMode->Ball&&Sprint&&Avatar->CanAct()&&!GameplayMode->BallStopRequested&&!GameplayMode->BallStopped&&!GameplayMode->ShotInFlight&&!GameplayMode->SprintKickPending&&Now>=GameplayMode->SprintContactUntil&&GameplayMode->IsRecoverableSprintTouch(Avatar))
+  if(ActiveScreen==EScreen::Game&&GameplayMode&&GameplayMode->Ball&&(Sprint||(!GameplayMode->PossessionActive&&!GetMoveIntentWorld().IsNearlyZero()))&&Avatar->CanAct()&&!GameplayMode->BallStopRequested&&!GameplayMode->BallStopped&&!GameplayMode->ShotInFlight&&!GameplayMode->SprintKickPending&&Now>=GameplayMode->SprintContactUntil&&GameplayMode->IsRecoverableSprintTouch(Avatar))
   {
    FVector Gap=GameplayMode->Ball->GetComponentLocation()-Avatar->GetActorLocation();
    const float GapDistance=Gap.Size2D();
    SprintReleaseLocked=Gap.Z<=-35.f&&GapDistance>48.f&&GapDistance<420.f;
-   SprintReleaseChase=SprintReleaseLocked&&GapDistance>80.f;
+   // Preserve an aligned foot approach, but never lock a sideways/backward body.
+   const bool NeedsFacingCorrection=FVector::DotProduct(Avatar->GetActorForwardVector(),Gap.GetSafeNormal2D())<.707107f;
+   SprintReleaseChase=SprintReleaseLocked&&(GapDistance>80.f||NeedsFacingCorrection);
    if(SprintReleaseChase)SprintChaseFacing=Gap.GetSafeNormal2D();
   }
   const float Speed=Avatar->GetVelocity().Size2D();
   const float SpeedAlpha=FMath::Clamp((Speed-180.f)/(765.f-180.f),0.f,1.f);
-  const float DesiredYawRate=SprintReleaseChase?360.f:OnBall?(BallControlHeld?720.f:FMath::Lerp(480.f,200.f,SpeedAlpha)):520.f;
+  const bool SprintCutFacing=Sprint&&OnBall&&FVector::DotProduct(Avatar->GetActorForwardVector(),GetMoveIntentWorld().GetSafeNormal2D())<.3f;
+  const float DesiredYawRate=SprintReleaseChase?360.f:OnBall?(BallControlHeld?660.f:FMath::Max(FMath::Lerp(480.f,200.f,SpeedAlpha),SprintCutFacing?420.f:0.f)):520.f;
   Movement->RotationRate.Yaw=FMath::FInterpTo(Movement->RotationRate.Yaw,DesiredYawRate,Dt,10.f);
   if(SprintReleaseChase)
   {
@@ -644,9 +663,6 @@ void AFootballController::Tick(float Dt){Super::Tick(Dt);
   }
   else if(SprintReleaseLocked)
   {
-   // Final approach: keep the last body orientation stable so changing input cannot
-   // rotate the capsule/foot socket away from a contact that is only a few centimetres
-   // away. Full steering returns when SprintKickPending marks real touch.
    Movement->bOrientRotationToMovement=false;
   }
   else if(OnBall)
@@ -673,6 +689,13 @@ void AFootballController::Tick(float Dt){Super::Tick(Dt);
  if(ActiveScreen==EScreen::Main||ActiveScreen==EScreen::Credits)UpdateDemo(Dt);
  FVector Cam,Target;float Fov=48;
  const bool GameplayView=ActiveScreen==EScreen::Game||ActiveScreen==EScreen::Pause;
+ if(GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))){
+  auto& Look=ViewCamera->GetCameraComponent()->PostProcessSettings;
+  Look.bOverride_DepthOfFieldFocalDistance=true;
+  Look.DepthOfFieldFocalDistance=(!GameplayView&&ActiveScreen!=EScreen::Editor)?780.f:0.f;
+  Look.bOverride_DepthOfFieldFstop=true;Look.DepthOfFieldFstop=4.f;
+ }
+
  if(GameplayView){
   const int32 Mode=Saved?FMath::Clamp(Saved->CameraMode,0,2):0;
   if(!CameraPivotInitialized){CameraPivot=P;CameraPivotInitialized=true;}
@@ -681,13 +704,23 @@ void AFootballController::Tick(float Dt){Super::Tick(Dt);
   else CameraPivot=FMath::VInterpTo(CameraPivot,P,Dt,5.5f);
   if(Mode==2){
    UpdatePitchCameraLead(Dt);
-   const FVector Center=CameraPivot+FVector(PitchCameraLeadX,0,0);
+   const FVector Center=UpdatePitchViewCenter(Dt,CameraPivot+FVector(PitchCameraLeadX,0,0));
    Cam=Center+FVector(0,1500,1050);Target=Center+FVector(0,-280,70);Fov=68;
+   Target=UpdatePitchShotTarget(Dt,Cam,Target,Fov);
   }else{
+   PitchViewInitialized=false;PitchShotTracking=false;PitchShotHoldRemaining=0.f;PitchShotOffset=FVector::ZeroVector;if(GameplayMode)PitchShotSeen=GameplayMode->LastShot;
    const float TopDown=FMath::Clamp((-Pitch-15.f)/25.f,0.f,1.f);const float LookAhead=FMath::Lerp(350.f,180.f,TopDown);const FVector ForwardDir=FRotator(0,Yaw,0).Vector();
    Target=CameraPivot+ForwardDir*LookAhead+FVector(0,0,40);Cam=CameraPivot-FRotator(Pitch,Yaw,0).Vector()*750+FVector(0,0,300);Fov=65;
   }
   ViewCamera->SetActorLocationAndRotation(Cam,(Target-Cam).Rotation());ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView,Fov,Dt,8.f));
+ }else if(ActiveScreen!=EScreen::Editor&&GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))){
+  // Low presentation camera keeps the existing football demo and saved wardrobe.
+  const FVector Side(.31f,.95f,0);
+  Target=P+Side*145.f+FVector(0,0,-10);
+  Cam=P+FVector(740,-245,45);Fov=42;
+  const bool Snap=ViewCamera->GetActorLocation().IsNearlyZero();
+  ViewCamera->SetActorLocationAndRotation(Cam,Snap?(Target-Cam).Rotation():FMath::RInterpTo(ViewCamera->GetActorRotation(),(Target-Cam).Rotation(),Dt,5.f));
+  ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView,Fov,Dt,5.f));
  }else{bool Close=ActiveScreen==EScreen::Editor;Target=P+FVector(0,0,0);if(Close)Fov=FMath::Lerp(48.f,34.f,EditorZoom);FVector Side=FVector(.65f,.76f,0);Target+=Side*(Close?170*Fov/48:220);Cam=P+FVector(Close?470:760,Close?-620:-1000,Close?190:310);float Speed=4;auto New=FMath::VInterpTo(ViewCamera->GetActorLocation(),Cam,Dt,Speed);auto R=FMath::RInterpTo(ViewCamera->GetActorRotation(),(Target-Cam).Rotation(),Dt,Speed);ViewCamera->SetActorLocationAndRotation(New,R);ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView,Fov,Dt,Speed));}
 }
 
@@ -824,7 +857,7 @@ void AFootballController::UpdateDemo(float Dt){
  if(DemoPhase==3&&T-DemoShotAt>=1.25f){DemoPhase=0;M->ResetBall();}
  // Entering the menu near midfield needs a short approach, not a completed-shot state.
  if(DemoPhase==4&&X*DemoDirection>=300.f&&Avatar->CanAct()){DemoDirection=-DemoDirection;DemoPhase=0;M->ResetBall();}
- Avatar->GetCharacterMovement()->MaxWalkSpeed=510;
+ Avatar->GetCharacterMovement()->MaxWalkSpeed=500;
  FVector Direction(DemoDirection,0,0);Direction.Y=FMath::Clamp(-Avatar->GetActorLocation().Y*.01f,-.3f,.3f);
  if(!Avatar->IsMovementLocked())Avatar->AddMovementInput(Direction.GetSafeNormal(),1);
  FVector To=M->Ball->GetComponentLocation()-Avatar->GetActorLocation();To.Z=0;
@@ -880,7 +913,7 @@ float AFootballController::UpdatePitchCameraLead(float Dt)
 
 void AFootballPlayer::Landed(const FHitResult& Hit){
  const bool Audible=GetVelocity().Z < -150;Super::Landed(Hit);
- if(PhysicalJump)if(auto Sequence=Animations.FindRef(CurrentAnimation)){AnimationTime=Sequence->GetPlayLength()*.76f;PlaybackRate=2.6f;}
+ if(PhysicalJump)if(auto Sequence=Animations.FindRef(CurrentAnimation)){AnimationTime=Sequence->GetPlayLength()*.76f;PlaybackRate=CurrentAnimation==TEXT("Jump_Run")?3.f*JumpAnimationScale:2.6f;}
  if(Audible)if(auto PC=Cast<AFootballController>(GetController()))if(PC->Screen==AFootballController::EScreen::Game)PC->PlayEffect(TEXT("jump"));
 }
 void AFootballController::PlayEffect(const FString& Name,float Gain){
@@ -898,5 +931,101 @@ void AFootballMode::CreateNetCollision(){
  for(int S:{-1,1}){Net(FVector(S*2990,0,130),FVector(12,700,260));for(int Y:{-1,1})Net(FVector(S*2870,Y*350,130),FVector(250,12,260));Net(FVector(S*2870,0,260),FVector(250,700,12));}
 }
 void AFootballMode::NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit){
- if(Ball&&OtherComp&&OtherComp->ComponentHasTag(TEXT("GoalNet"))){auto V=Ball->GetPhysicsLinearVelocity();Ball->SetPhysicsLinearVelocity(FVector(0,0,FMath::Min(V.Z,0.f)));Ball->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);}
+ if(HitComponent&&OtherComp&&OtherComp->ComponentHasTag(TEXT("GoalNet"))){auto V=HitComponent->GetPhysicsLinearVelocity();HitComponent->SetPhysicsLinearVelocity(FVector(0,0,FMath::Min(V.Z,0.f)));HitComponent->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);}
+}
+
+FVector AFootballController::UpdatePitchShotTarget(float Dt,const FVector& Cam,const FVector& NormalTarget,float Fov)
+{
+ auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();
+ if(!M||!M->Ball)return NormalTarget;
+ const float Now=GetWorld()->GetTimeSeconds();
+ const FVector BallPosition=M->Ball->GetComponentLocation(),Velocity=M->Ball->GetPhysicsLinearVelocity();
+ if(M->ShotInFlight&&M->LastShot!=PitchShotSeen)
+ {
+  PitchShotSeen=M->LastShot;PitchShotTracking=false;PitchShotHoldRemaining=0.f;
+  PitchShotGoalX=Velocity.X>=0.f?2762.f:-2762.f;
+  // Evaluate the goal mouth in the normal player-anchored view at shot release.
+  const FRotationMatrix Basis((NormalTarget-Cam).Rotation());
+  int32 Width=0,Height=0;GetViewportSize(Width,Height);
+  const float Aspect=Width>0&&Height>0?float(Width)/Height:16.f/9.f;
+  const float TanHorizontal=FMath::Tan(FMath::DegreesToRadians(Fov*.5f));
+  bool GoalVisible=true;
+  for(float Side:{-350.f,350.f})for(float Z:{0.f,260.f})
+  {
+   const FVector Delta=FVector(PitchShotGoalX,Side,Z)-Cam;
+   const float Depth=FVector::DotProduct(Delta,Basis.GetUnitAxis(EAxis::X));
+   GoalVisible&=Depth>0.f&&FMath::Abs(FVector::DotProduct(Delta,Basis.GetUnitAxis(EAxis::Y)))<=Depth*TanHorizontal*.95f
+      &&FMath::Abs(FVector::DotProduct(Delta,Basis.GetUnitAxis(EAxis::Z)))<=Depth*TanHorizontal/Aspect*.95f;
+  }
+  PitchShotTracking=!GoalVisible&&!M->Scored&&!M->BallHidden&&FMath::Abs(Velocity.X)>150.f;
+  PitchShotStarted=Now;
+ }
+ if(PitchShotTracking&&(M->Scored||M->BallHidden||!M->ShotInFlight||Now-PitchShotStarted>8.f
+    ||(Now-PitchShotStarted>.4f&&(Velocity.Size2D()<120.f||Velocity.X*PitchShotGoalX<0.f))))
+ {
+  PitchShotTracking=false;
+  PitchShotHoldRemaining=M->Scored?1.4f:.65f;
+  PitchShotHoldTarget=FMath::Lerp(BallPosition,FVector(PitchShotGoalX,0,130),.12f);
+ }
+ FVector DesiredOffset=FVector::ZeroVector;
+ if(PitchShotTracking)
+ {
+  const FVector Goal(PitchShotGoalX,0,130);
+  const FVector Aim=FMath::Lerp(BallPosition+Velocity*.12f,Goal,.12f);
+  DesiredOffset=Aim-NormalTarget;
+ }
+ else if(PitchShotHoldRemaining>0.f)
+ {
+  PitchShotHoldRemaining=FMath::Max(0.f,PitchShotHoldRemaining-Dt);
+  DesiredOffset=PitchShotHoldTarget-NormalTarget;
+ }
+ // Only the viewing direction changes; camera translation remains player driven.
+ const float Alpha=1.f-FMath::Exp(-(PitchShotTracking?3.5f:2.8f)*Dt);
+ PitchShotOffset=FMath::Lerp(PitchShotOffset,DesiredOffset,Alpha);
+ if(!PitchShotTracking&&PitchShotOffset.SizeSquared()<1.f)PitchShotOffset=FVector::ZeroVector;
+ return NormalTarget+PitchShotOffset;
+}
+
+void AFootballMode::PreserveFinishedBall()
+{
+ // Preserve the completed shot as an independent physical ball. Keep the live
+ // component stable so input/contact code never observes a newly initialized body.
+ auto* Old=Ball;
+ auto* Actor=GetWorld()->SpawnActor<AStaticMeshActor>(Old->GetComponentLocation(),Old->GetComponentRotation());
+ if(!Actor)return;
+ auto* Fresh=Actor->GetStaticMeshComponent();
+ Fresh->SetMobility(EComponentMobility::Movable);Fresh->SetStaticMesh(Old->GetStaticMesh());
+ Fresh->SetWorldScale3D(Old->GetComponentScale());
+ for(int32 I=0;I<Old->GetNumMaterials();++I)Fresh->SetMaterial(I,Old->GetMaterial(I));
+ Fresh->SetCollisionProfileName(TEXT("PhysicsActor"));Fresh->SetCollisionResponseToChannel(ECC_Pawn,ECR_Ignore);
+ Fresh->SetSimulatePhysics(true);Fresh->SetMassOverrideInKg(NAME_None,.43f);
+ Fresh->SetAngularDamping(.2f);Fresh->BodyInstance.bUseCCD=true;
+ Fresh->SetPhysMaterialOverride(Old->BodyInstance.GetSimplePhysicalMaterial());
+ Fresh->SetRenderCustomDepth(Old->bRenderCustomDepth);Fresh->SetCustomDepthStencilValue(Old->CustomDepthStencilValue);
+ Fresh->SetNotifyRigidBodyCollision(true);Fresh->OnComponentHit.AddDynamic(this,&AFootballMode::NetHit);
+ Fresh->SetVisibility(true);Fresh->SetLinearDamping(1.2f);
+ Fresh->SetPhysicsLinearVelocity(Old->GetPhysicsLinearVelocity());
+ Fresh->SetPhysicsAngularVelocityInRadians(Old->GetPhysicsAngularVelocityInRadians());
+ // Finished attempts keep ground/net physics without deflecting the live ball.
+ Fresh->SetCollisionResponseToChannel(ECC_PhysicsBody,ECR_Ignore);
+ FinishedBalls.Add(Fresh);
+}
+
+FVector AFootballController::UpdatePitchViewCenter(float Dt,const FVector& Desired)
+{
+ auto* M=GetWorld()->GetAuthGameMode<AFootballMode>();
+ if(!PitchViewInitialized){PitchViewCenter=Desired;PitchViewInitialized=true;PitchViewReturning=false;}
+ const float ShotAge=M?GetWorld()->GetTimeSeconds()-M->LastShot:0.f;
+ const bool LiveShot=M&&M->Ball&&M->ShotInFlight&&!M->Scored&&!M->BallHidden&&ShotAge<8.f
+   &&(ShotAge<=.4f||M->Ball->GetPhysicsLinearVelocity().Size2D()>=120.f);
+ // Freeze the complete camera anchor, including movement lead. The live player
+ // pivot may keep updating, but cannot move or tilt the shot's camera frame.
+ if(LiveShot||PitchShotTracking||PitchShotHoldRemaining>0.f){PitchViewReturning=true;return PitchViewCenter;}
+ if(PitchViewReturning)
+ {
+  PitchViewCenter=FMath::Lerp(PitchViewCenter,Desired,1.f-FMath::Exp(-2.8f*Dt));
+  if(PitchViewCenter.Equals(Desired,.1f))PitchViewReturning=false;
+ }
+ else PitchViewCenter=Desired;
+ return PitchViewCenter;
 }
