@@ -4,6 +4,7 @@
 #include "Football.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Slider.h"
+#include "Components/CanvasPanel.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
 #include "UnrealClient.h"
@@ -56,6 +57,15 @@ void UErlingInterface::RunUIChecks()
         Check(Name,Valid&&Count>0);
     };
     using S=AFootballController::EScreen;
+    // Reference renders use the disposable test profile, retaining the player's language/kit.
+    if(FParse::Param(FCommandLine::Get(),TEXT("StorybookUIReview"))&&CheckStage>=24&&CheckStage<=27)
+    {
+        if(CheckStage==24){C->Saved->Language=0;C->ChangeScreen(S::Game);RefreshScreen();}
+        if(CheckStage==25)Shot(TEXT("12_HUD_EN"));
+        if(CheckStage==26){C->Saved->Appearance=CheckAppearance;C->Selection=CheckAppearance;C->Avatar->ApplyKit(C->Selection,C->Catalog);C->ChangeScreen(S::Main);RefreshScreen();}
+        if(CheckStage==27)Shot(TEXT("13_Main_Reference_EN"));
+        ++CheckStage;NextCheck=Now+1.1;return;
+    }
     // Optional fixed-pose visual evidence for both collar sides after clothing edits.
     if(FParse::Param(FCommandLine::Get(),TEXT("CollarReview"))&&CheckStage>=24&&CheckStage<=29)
     {
@@ -70,7 +80,22 @@ void UErlingInterface::RunUIChecks()
     switch(CheckStage)
     {
     case 0:{int32 Width=1920,Height=1080;FParse::Value(FCommandLine::Get(),TEXT("ResX="),Width);FParse::Value(FCommandLine::Get(),TEXT("ResY="),Height);C->ConsoleCommand(FString::Printf(TEXT("r.SetRes %dx%dw"),Width,Height));}C->Saved->Language=1;C->Saved->PauseInSettings=false;C->Saved->Appearance={1,0,1,1,1};C->Selection=C->Saved->Appearance;C->Avatar->ApplyKit(C->Selection,C->Catalog);C->ChangeScreen(S::Main);RefreshScreen();Check(TEXT("designer_blueprint"),GetClass()->GetPathName().Contains(TEXT("WBP_ErlingInterface_C")));Check(TEXT("six_pages"),ScreenSwitcher&&ScreenSwitcher->GetNumWidgets()==6);break;
-    case 1:Bounds(TEXT("main_bounds"));Check(TEXT("main_keyboard_focus"),GetWidgetFromName(TEXT("PlayButton"))->HasAnyUserFocus());Shot(TEXT("01_Main_PL"));break;
+    case 1:
+    {
+        Bounds(TEXT("main_bounds"));Check(TEXT("main_keyboard_focus"),GetWidgetFromName(TEXT("PlayButton"))->HasAnyUserFocus());
+        auto* Panel=CastChecked<UCanvasPanel>(GetWidgetFromName(TEXT("MainPanel")));
+        const auto G=Panel->GetCachedGeometry();bool Inside=true;
+        for(UWidget* Child:Panel->GetAllChildren()) if(Cast<UErlingUIButton>(Child))
+        {
+            const auto ChildG=Child->GetCachedGeometry();
+            const auto A=G.AbsoluteToLocal(ChildG.LocalToAbsolute(FVector2D::ZeroVector));
+            const auto Z=G.AbsoluteToLocal(ChildG.LocalToAbsolute(ChildG.GetLocalSize()));
+            Inside&=A.X>=0&&A.Y>=0&&Z.X<=G.GetLocalSize().X&&Z.Y<=G.GetLocalSize().Y;
+        }
+        Check(TEXT("main_buttons_inside_panel"),Inside);
+        Check(TEXT("main_backplate_matches_panel"),Panel->GetChildAt(0)->GetCachedGeometry().GetLocalSize().Equals(G.GetLocalSize(),1));
+        Shot(TEXT("01_Main_PL"));break;
+    }
     case 2:MouseClick(TEXT("CharacterButton"));CheckAppearance=C->Selection;break;
     case 3:Check(TEXT("mouse_opens_character_screen"),C->Screen==S::Editor);Bounds(TEXT("character_bounds"));Shot(TEXT("02_Character_PL"));break;
     case 4:for(int32 I=0;I<C->Catalog.Num();++I){const int32 Old=C->Selection[I];Click(*FString::Printf(TEXT("AppearanceNext%d"),I));Check(*FString::Printf(TEXT("category_%d_next"),I),C->Selection[I]==(Old+1)%C->Catalog[I].Options.Num());Click(*FString::Printf(TEXT("AppearancePrevious%d"),I));Check(*FString::Printf(TEXT("category_%d_previous"),I),C->Selection[I]==Old);}Click(TEXT("PreviewNext"));Check(TEXT("preview_animation"),C->PreviewIndex>=0&&C->Avatar->PreviewAnimation);Click(TEXT("AppearanceNext2"));Click(TEXT("CharacterBackButton"));Check(TEXT("cancel_draft"),C->Screen==S::Main&&C->Selection==CheckAppearance);break;

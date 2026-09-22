@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="32" viewBox="0 0 256 32">
+  <defs><linearGradient id="wash" x2="0" y2="1"><stop stop-color="#DA5B91"/><stop offset="1" stop-color="#DA5B91"/></linearGradient></defs>
+  <rect x="2" y="2" width="252" height="28" rx="8" fill="url(#wash)" stroke="#DA5B91" stroke-width="0"/></svg>

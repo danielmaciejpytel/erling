@@ -844,7 +844,12 @@ void AFootballController::ApplyQuality(){
  auto Set=[](const TCHAR* N,int V){if(auto C=IConsoleManager::Get().FindConsoleVariable(N))C->Set(V,ECVF_SetByCode);};
  Set(TEXT("r.Shadow.MaxResolution"),Saved->Quality==3?4096:Saved->Quality==2?2048:1024);Set(TEXT("r.Shadow.CSM.MaxCascades"),Saved->Quality==3?4:2);
  Set(TEXT("r.ContactShadows"),Saved->Quality>=2);Set(TEXT("r.AmbientOcclusionLevels"),Saved->Quality==3?3:Saved->Quality>=1?1:0);
- Set(TEXT("r.DynamicGlobalIlluminationMethod"),Saved->Quality==3?1:0);Set(TEXT("r.Lumen.DiffuseIndirect.Allow"),Saved->Quality==3);Set(TEXT("r.Lumen.Reflections.Allow"),0);
+ // Pitch_ArtDirection has a deliberately flat storybook light rig. Keep GI
+ // deterministic across quality presets so Ultra cannot turn the pastel look
+ // back into a glossy/realistic Lumen render.
+ const bool Storybook=GetWorld()&&GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"));
+ Set(TEXT("r.DynamicGlobalIlluminationMethod"),Storybook?0:(Saved->Quality==3?1:0));
+ Set(TEXT("r.Lumen.DiffuseIndirect.Allow"),Storybook?0:(Saved->Quality==3));Set(TEXT("r.Lumen.Reflections.Allow"),0);
 }
 
 
