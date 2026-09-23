@@ -86,7 +86,7 @@ public:
     UTextBlock* Text(UCanvasPanel* Parent,const FString& Name,const FString& En,const FString& Pl,
         float X,float Y,float W,float H,int32 Size=22,FLinearColor Color=White,bool Bold=false,bool Center=false)
     {
-        auto* T=Make<UErlingUIText>(Name); T->English=FText::FromString(En); T->Polish=FText::FromString(Pl); T->SetLanguage(true);
+        auto* T=Make<UErlingUIText>(Name); T->English=FText::FromString(En).ToUpper(); T->Polish=FText::FromString(Pl).ToUpper(); T->SetLanguage(true);
         FSlateFontInfo Font(LoadObject<UFont>(nullptr,TEXT("/Engine/EngineFonts/Roboto.Roboto")),Size,Bold?FName(TEXT("Bold")):FName(TEXT("Regular")));
         T->SetFont(Font); T->SetColorAndOpacity(Color); T->SetJustification(Center?ETextJustify::Center:ETextJustify::Left);
         T->SetVisibility(ESlateVisibility::HitTestInvisible); At(Parent,T,X,Y,W,H); return T;
@@ -109,7 +109,7 @@ public:
         Style.NormalPadding=FMargin(0); Style.PressedPadding=FMargin(0,1,0,-1); B->SetStyle(Style);
         auto* Body=Make<UCanvasPanel>(); B->AddChild(Body); auto* ButtonSlot=CastChecked<UButtonSlot>(Body->Slot); ButtonSlot->SetPadding(FMargin(0)); ButtonSlot->SetHorizontalAlignment(HAlign_Fill); ButtonSlot->SetVerticalAlignment(VAlign_Fill);
         if (!Icon.IsEmpty()) Image(Body,Icon,28,(H-36)/2,36,36);
-        Text(Body,Name+TEXT("Label"),En,Pl,Icon.IsEmpty()?26:98,(H-34)/2,W-(Icon.IsEmpty()?80:150),38,22,White,Primary);
+        Text(Body,Name+TEXT("Label"),En,Pl,Icon.IsEmpty()?26:98,(H-38)/2,W-(Icon.IsEmpty()?80:150),38,22,White,Primary);
         Image(Body,TEXT("T_UI_Icon_ChevronRight_White"),W-48,(H-30)/2,30,30,.8f);
         At(Parent,B,X,Y,W,H); return B;
     }
@@ -132,7 +132,7 @@ public:
     {
         auto* B=Button(C,Name,Action,En,Pl,TEXT(""),38,Y,636,68);
         auto* Body=CastChecked<UCanvasPanel>(B->GetContent());
-        Text(Body,Value,TEXT(""),TEXT(""),326,20,245,38,20,Pink,false,true);
+        Text(Body,Value,TEXT(""),TEXT(""),326,15,245,38,20,Pink,false,true);
         if(auto* L=Cast<UCanvasPanelSlot>(Body->GetChildAt(0)->Slot)) L->SetSize(FVector2D(308,38));
     }
     void Slider(UCanvasPanel* C,const FString& Name,const FString& Value,const FString& En,const FString& Pl,float Y)
@@ -150,8 +150,8 @@ public:
     {
         const float KeyW=Mouse?38:Key==TEXT("W A S D")?112:Key.Len()>4?76:Key.Len()>1?64:34;
         Image(C,Mouse?TEXT("T_UI_Mouse_Outline"):TEXT("T_UI_Keycap_Wide_Normal"),X,-5,KeyW,46);
-        if(!Mouse) Text(C,TEXT(""),Key,Key==TEXT("SPACE")?TEXT("SPACJA"):Key,X,6,KeyW,27,13,White,true,true);
-        Text(C,TEXT(""),En,Pl,X+KeyW+12,6,W-KeyW-12,30,15,White);
+        if(!Mouse) Text(C,TEXT(""),Key,Key==TEXT("SPACE")?TEXT("SPACJA"):Key,X,4,KeyW,27,13,White,true,true);
+        Text(C,TEXT(""),En,Pl,X+KeyW+12,3,W-KeyW-12,30,15,White);
     }
     bool UpdateStorybook()
     {
@@ -160,21 +160,62 @@ public:
         const FLinearColor Rose=FLinearColor::FromSRGBColor(FColor(218,91,145));
         const FString FontPackage=TEXT("/Game/Erling/UI/Fonts/F_Storybook");
         auto* Font=FPackageName::DoesPackageExist(FontPackage)?LoadObject<UFont>(nullptr,*(FontPackage+TEXT(".F_Storybook"))):nullptr;
-        if(!Font)
+        // Keep the established UMG font asset, but refresh its embedded face so
+        // every existing widget picks up the selected menu typeface in place.
         {
             TArray<uint8> Bytes;
-            const FString Filename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/PatrickHand-Regular.ttf");
+            const FString Filename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_CorsairPE-Rg.otf");
             if(!FFileHelper::LoadFileToArray(Bytes,*Filename)) return false;
-            auto* Face=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_PatrickHand")),TEXT("FF_PatrickHand"),RF_Public|RF_Standalone);
-            Face->InitializeFromBulkData(Filename,EFontHinting::Default,Bytes.GetData(),Bytes.Num());
+            auto* Face=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_CorsairPE.FF_CorsairPE"));
+            const bool bNewFace=!Face;
+            if(!Face) Face=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_CorsairPE")),TEXT("FF_CorsairPE"),RF_Public|RF_Standalone);
+            if(bNewFace) Face->InitializeFromBulkData(Filename,EFontHinting::Default,Bytes.GetData(),Bytes.Num());
+            Face->SourceFilename=Filename;
             Face->LoadingPolicy=EFontLoadingPolicy::Inline;
-            Font=NewObject<UFont>(CreatePackage(*FontPackage),TEXT("F_Storybook"),RF_Public|RF_Standalone);
+            TArray<uint8> FallbackBytes;
+            const FString FallbackFilename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_Brother.otf");
+            if(!FFileHelper::LoadFileToArray(FallbackBytes,*FallbackFilename)) return false;
+            auto* FallbackFace=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_BrotherDemo.FF_BrotherDemo"));
+            const bool bNewFallbackFace=!FallbackFace;
+            if(!FallbackFace) FallbackFace=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_BrotherDemo")),TEXT("FF_BrotherDemo"),RF_Public|RF_Standalone);
+            if(bNewFallbackFace) FallbackFace->InitializeFromBulkData(FallbackFilename,EFontHinting::Default,FallbackBytes.GetData(),FallbackBytes.Num());
+            FallbackFace->SourceFilename=FallbackFilename;
+            FallbackFace->LoadingPolicy=EFontLoadingPolicy::Inline;
+            TArray<uint8> QBytes;
+            const FString QFilename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_Brother-QBaseline.otf");
+            if(!FFileHelper::LoadFileToArray(QBytes,*QFilename)) return false;
+            auto* QFace=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_BrotherQBaseline.FF_BrotherQBaseline"));
+            const bool bNewQFace=!QFace;
+            if(!QFace) QFace=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_BrotherQBaseline")),TEXT("FF_BrotherQBaseline"),RF_Public|RF_Standalone);
+            if(bNewQFace) QFace->InitializeFromBulkData(QFilename,EFontHinting::Default,QBytes.GetData(),QBytes.Num());
+            QFace->SourceFilename=QFilename;
+            QFace->LoadingPolicy=EFontLoadingPolicy::Inline;
+            const bool bNewFont=!Font;
+            if(!Font) Font=NewObject<UFont>(CreatePackage(*FontPackage),TEXT("F_Storybook"),RF_Public|RF_Standalone);
             Font->FontCacheType=EFontCacheType::Runtime;
             FTypefaceEntry Entry(TEXT("Regular")); Entry.Font=FFontData(Face);
+            Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.Reset();
             Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.Add(Entry);
-            for(UObject* Asset:TArray<UObject*>{Face,Font})
+            // Brother DEMO is consulted only if Corsair PE cannot supply a glyph.
+            FTypefaceEntry FallbackEntry(TEXT("Regular"));FallbackEntry.Font=FFontData(FallbackFace);
+            auto& Fallback=Font->GetMutableInternalCompositeFont().FallbackTypeface.Typeface;
+            Fallback.Fonts.Reset();Fallback.Fonts.Add(FallbackEntry);
+            // Use a dedicated Brother face with its Q aligned to Corsair's cap line.
+            auto& SubTypefaces=Font->GetMutableInternalCompositeFont().SubTypefaces;
+            SubTypefaces.Reset();
+            FCompositeSubFont CapitalQ;
+            FTypefaceEntry QEntry(TEXT("Regular"));QEntry.Font=FFontData(QFace);
+            CapitalQ.Typeface.Fonts.Add(QEntry);
+            CapitalQ.CharacterRanges.Emplace(0x0051);
+            // Keep its rendered height matched after repositioning the glyph outline.
+            CapitalQ.ScalingFactor=0.97f;
+#if WITH_EDITORONLY_DATA
+            CapitalQ.EditorName=TEXT("Brother DEMO - capital Q");
+#endif
+            SubTypefaces.Add(MoveTemp(CapitalQ));
+            for(UObject* Asset:TArray<UObject*>{Face,FallbackFace,QFace,Font})
             {
-                FAssetRegistryModule::AssetCreated(Asset); Asset->MarkPackageDirty();
+                if((Asset==Face&&bNewFace)||(Asset==FallbackFace&&bNewFallbackFace)||(Asset==QFace&&bNewQFace)||(Asset==Font&&bNewFont)) FAssetRegistryModule::AssetCreated(Asset); Asset->MarkPackageDirty();
                 FSavePackageArgs Save;Save.TopLevelFlags=RF_Public|RF_Standalone;Save.SaveFlags=SAVE_NoError;
                 if(!UPackage::SavePackage(Asset->GetOutermost(),Asset,*FPackageName::LongPackageNameToFilename(Asset->GetOutermost()->GetName(),FPackageName::GetAssetPackageExtension()),Save)) return false;
             }
@@ -201,6 +242,12 @@ public:
         {
             if(auto* T=Cast<UTextBlock>(W))
             {
+                if(auto* Localized=Cast<UErlingUIText>(T))
+                    if(Localized->English.ToString().Equals(TEXT("Graphics quality"),ESearchCase::IgnoreCase))
+                    {
+                        Localized->English=FText::FromString(TEXT("GRAPHICS QUALITY"));
+                        Localized->SetLanguage(false);
+                    }
                 SetType(T,T->GetFont().Size);
                 const auto Old=T->GetColorAndOpacity().GetSpecifiedColor();
                 T->SetColorAndOpacity(Old.R>Old.G*2.f?Rose:Cream);
@@ -220,6 +267,34 @@ public:
             }
             if(auto* B=Cast<UErlingUIButton>(W))
             {
+                const auto* ButtonCanvasSlot=Cast<UCanvasPanelSlot>(B->Slot);
+                const float ButtonHeight=ButtonCanvasSlot?ButtonCanvasSlot->GetSize().Y:0.f;
+                if(auto* Body=Cast<UCanvasPanel>(B->GetContent()))
+                    for(UWidget* Child:Body->GetAllChildren())
+                        if(Cast<UTextBlock>(Child))
+                            if(auto* TextSlot=Cast<UCanvasPanelSlot>(Child->Slot);TextSlot&&ButtonHeight>0.f)
+                            {
+                                FVector2D Position=TextSlot->GetPosition();
+                                Position.Y=(ButtonHeight-TextSlot->GetSize().Y)*.5f;
+                                // Text geometry can be centered while Corsair's visible glyphs still sit low.
+                                // Tune the few button families against rendered screenshots at design resolution.
+                                const FName ButtonName=B->GetFName();
+                                const FName TextName=Child->GetFName();
+                                float VisualNudge=0.f;
+                                if(ButtonName==TEXT("SaveSettingsButton")) VisualNudge=-5.f;
+                                else if(ButtonName==TEXT("SaveAppearanceButton")) VisualNudge=-3.f;
+                                else if(ButtonName==TEXT("LanguageButton")&&TextName==TEXT("LanguageButtonLabel")) VisualNudge=-5.f;
+                                else if(ButtonName==TEXT("CameraButton")&&TextName==TEXT("CameraButtonLabel")) VisualNudge=-3.f;
+                                else if(ButtonName==TEXT("QualityButton")) VisualNudge=TextName==TEXT("QualityButtonLabel")?-1.f:-1.5f;
+                                else if(ButtonName==TEXT("PauseSettingButton")) VisualNudge=TextName==TEXT("PauseSettingButtonLabel")?-3.f:-1.5f;
+                                else if(ButtonName==TEXT("PauseSettingsButton")) VisualNudge=-3.f;
+                                else if(ButtonName==TEXT("ArtStationButton")) VisualNudge=-2.f;
+                                else if(ButtonName==TEXT("LinkedInButton")||ButtonName==TEXT("CreditsBackButton")) VisualNudge=-2.f;
+                                else if(ButtonName==TEXT("CharacterBackButton")) VisualNudge=-2.f;
+                                else if(ButtonName==TEXT("GitHubButton")) VisualNudge=-3.f;
+                                Position.Y+=VisualNudge;
+                                TextSlot->SetPosition(Position);
+                            }
                 FButtonStyle Style=B->GetStyle();
                 auto Replace=[&](FSlateBrush& Value) {if(auto* R=Value.GetResourceObject()) if(Assets.Contains(R->GetName())) Value=Brush(R->GetName());};
                 Replace(Style.Normal);Replace(Style.Hovered);Replace(Style.Pressed);Replace(Style.Disabled);
@@ -251,7 +326,7 @@ public:
                 if(En==TEXT("ERLING")) {Move(T,46,-4,394,150);SetType(T,108,2);}
                 else if(En.Contains(TEXT("C L U B"))||En==TEXT("FOOTBALL CLUB"))
                 {
-                    T->English=FText::FromString(TEXT("FOOTBALL CLUB"));T->Polish=T->English;T->SetText(T->English);
+                    T->English=FText::FromString(TEXT("FOOTBALL CLUB"));T->Polish=T->English;T->SetLanguage(false);
                     Move(T,58,164,366,64);SetType(T,38);auto Info=T->GetFont();Info.LetterSpacing=120;T->SetFont(Info);T->SetColorAndOpacity(Rose);
                 }
             }
@@ -279,7 +354,11 @@ public:
             auto* Body=Cast<UCanvasPanel>(B->GetContent());
             for(UWidget* W:Body->GetAllChildren())
             {
-                if(auto* T=Cast<UTextBlock>(W)) {Move(T,104,Index==1?17:13,250,58);SetType(T,Index==0?36:Index==1?26:30);}
+                if(auto* T=Cast<UTextBlock>(W))
+                {
+                    const float TextY[]={6.f,16.f,12.f,16.5f,16.5f};
+                    Move(T,104,TextY[Index],250,58);SetType(T,Index==0?36:Index==1?26:30);
+                }
                 if(auto* I=Cast<UImage>(W))
                 {
                     const bool Chevron=I->GetBrush().GetResourceObject()->GetName().Contains(TEXT("Chevron"));
@@ -287,6 +366,47 @@ public:
                 }
             }
         }
+        if(auto* Character=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("CharacterPanel"))))
+            for(UWidget* Child:Character->GetAllChildren())
+                if(Cast<UTextBlock>(Child))
+                    if(auto* Slot=Cast<UCanvasPanelSlot>(Child->Slot))
+                    {
+                        FVector2D Position=Slot->GetPosition();
+                        if(FMath::IsNearlyEqual(Position.X,138.f,1.f)&&Position.Y>=230.f&&Position.Y<730.f)
+                        {
+                            const int32 Row=FMath::Clamp(FMath::RoundToInt((Position.Y-247.f)/106.f),0,4);
+                            const float LabelNudge[]={0.f,0.f,0.f,3.f,0.f};
+                            Position.Y=215.f+Row*106.f+27.f+LabelNudge[Row];
+                            Slot->SetPosition(Position);
+                        }
+                    }
+        for(int32 Index=0;Index<5;++Index)
+            if(auto* Value=Tree->FindWidget(FName(*FString::Printf(TEXT("AppearanceValue%d"),Index))))
+                if(auto* Slot=Cast<UCanvasPanelSlot>(Value->Slot))
+                {
+                    FVector2D Position=Slot->GetPosition();
+                    const float ValueNudge[]={-2.f,2.f,-2.f,-2.f,-2.f};
+                    Position.Y=215.f+Index*106.f+27.f+ValueNudge[Index];
+                    Slot->SetPosition(Position);
+                }
+        if(auto* Preview=Tree->FindWidget(TEXT("PreviewValue")))
+            if(auto* Slot=Cast<UCanvasPanelSlot>(Preview->Slot))
+            {
+                FVector2D Position=Slot->GetPosition();
+                Position.Y=768.f;
+                Slot->SetPosition(Position);
+            }
+        for(UWidget* W:Widgets)
+            if(auto* T=Cast<UErlingUIText>(W))
+            {
+                const FString English=T->English.ToString();
+                if(English.Equals(TEXT("Animation preview"),ESearchCase::IgnoreCase))
+                    if(auto* Slot=Cast<UCanvasPanelSlot>(T->Slot))
+                    { FVector2D Position=Slot->GetPosition();Position.Y-=1.f;Slot->SetPosition(Position); }
+                if(English.StartsWith(TEXT("Drag to rotate")))
+                    Move(T,1082,1027,620,30);
+            }
+        Move(Tree->FindWidget(TEXT("ToastValue")),72,17,728,38);
         auto* HUD=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GameHUD")));
         auto* Hints=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("ControlHints")));
         if(!HUD||!Hints)return false;
@@ -312,13 +432,13 @@ public:
                 Image(Hints,TEXT("T_UI_Keycap_Wide_Normal"),X,3,KeyWidth,44);
                 auto* T=Text(Hints,TEXT(""),Key,Key,X,3,KeyWidth,44,22,Cream,false,true);SetType(T,22);
             }
-            auto* T=Text(Hints,TEXT(""),En,Pl,X+KeyWidth+10,7,TotalWidth-KeyWidth-10,44,20,Cream);SetType(T,20);
+            auto* T=Text(Hints,TEXT(""),En,Pl,X+KeyWidth+10,3,TotalWidth-KeyWidth-10,44,20,Cream);SetType(T,20);
         };
         KeyHint(0,148,237,TEXT("WASD"),TEXT("move"),TEXT("ruch"));
         KeyHint(245,88,202,TEXT("CTRL"),TEXT("control"),TEXT("kontrola"));
         KeyHint(455,96,195,TEXT("SHIFT"),TEXT("sprint"),TEXT("sprint"));
         KeyHint(658,105,196,TEXT("SPACE"),TEXT("jump"),TEXT("skok"));
-        KeyHint(862,34,272,TEXT(""),TEXT("hold / release"),TEXT("przytrzymaj / puść"));
+        KeyHint(862,34,272,TEXT(""),TEXT("shoot / pass"),TEXT("strzał / podanie"));
         KeyHint(1142,84,186,TEXT("RMB"),TEXT("slide"),TEXT("wślizg"));
         KeyHint(1336,40,203,TEXT("R"),TEXT("reset ball"),TEXT("reset piłki"));
         KeyHint(1547,78,196,TEXT("ESC"),TEXT("pause"),TEXT("pauza"));
@@ -328,15 +448,20 @@ public:
     {
         // Preserve all other Designer edits when updating an existing interface.
         if(auto* Goals=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GoalsPanel"))))
+        {
             if(auto* Slot=Cast<UCanvasPanelSlot>(Goals->GetChildAt(0)->Slot))
             { Slot->SetPosition(FVector2D(-20,-10)); Slot->SetSize(FVector2D(396,110)); }
-        if(auto* Hints=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("ControlHints"))))
-            for(UWidget* Child:Hints->GetAllChildren())
-                if(auto* I=Cast<UImage>(Child))
-                    if(I->GetBrush().GetResourceObject() && I->GetBrush().GetResourceObject()->GetName()==TEXT("T_UI_Keycap_Wide_Normal"))
-                        if(auto* Slot=Cast<UCanvasPanelSlot>(I->Slot))
-                            if(Slot->GetSize().Y<60)
-                            { Slot->SetPosition(Slot->GetPosition()+FVector2D(-8,-7)); Slot->SetSize(Slot->GetSize()+FVector2D(16,14)); }
+            for(UWidget* Child:Goals->GetAllChildren())
+                if(auto* Label=Cast<UTextBlock>(Child))
+                    if(auto* Slot=Cast<UCanvasPanelSlot>(Label->Slot))
+                    {
+                        const FString Value=Label->GetText().ToString();
+                        FVector2D Position=Slot->GetPosition();
+                        if(Value.Contains(TEXT("GOLE"))||Value.Contains(TEXT("GOALS"))) Position.Y=16;
+                        else if(Label->GetFName()==TEXT("GoalsValue")) Position.Y=3;
+                        Slot->SetPosition(Position);
+                    }
+        }
         if(!Tree->FindWidget(TEXT("PlayerShotPanel")))
             if(auto* HUD=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("GameHUD"))))
             {
@@ -361,7 +486,7 @@ public:
                             {
                                 Back->SetPosition(FVector2D(1062,1017));Back->SetSize(FVector2D(660,53));
                                 auto* TextSlot=CastChecked<UCanvasPanelSlot>(Label->Slot);
-                                TextSlot->SetPosition(FVector2D(1082,1031));TextSlot->SetSize(FVector2D(620,30));
+                                TextSlot->SetPosition(FVector2D(1082,1028));TextSlot->SetSize(FVector2D(620,30));
                                 return true;
                             }
         UE_LOG(LogTemp,Error,TEXT("Character hint widgets not found; interface left intact"));return false;
@@ -397,31 +522,31 @@ public:
             const float Y=215+I*106;
             Image(Character,TEXT("T_UI_OptionRow_Normal"),36,Y,698,94);
             Image(Character,FString::Printf(TEXT("T_UI_Icon_%s_Silver"),Icons[I]),64,Y+25,44,44);
-            Text(Character,TEXT(""),En[I],Pl[I],138,Y+32,160,40,20,Muted);
+            Text(Character,TEXT(""),En[I],Pl[I],138,Y+27,160,40,20,Muted);
             Arrow(Character,FString::Printf(TEXT("AppearancePrevious%d"),I),EErlingUIAction::AppearancePrevious,I,306,Y+19,false);
-            Text(Character,FString::Printf(TEXT("AppearanceValue%d"),I),TEXT(""),TEXT(""),370,Y+31,282,40,21,White,false,true);
+            Text(Character,FString::Printf(TEXT("AppearanceValue%d"),I),TEXT(""),TEXT(""),370,Y+27,282,40,21,White,false,true);
             Arrow(Character,FString::Printf(TEXT("AppearanceNext%d"),I),EErlingUIAction::AppearanceNext,I,660,Y+19,true);
         }
         Text(Character,TEXT(""),TEXT("Animation preview"),TEXT("Podgląd animacji"),50,768,250,34,17,Muted);
         Arrow(Character,TEXT("PreviewPrevious"),EErlingUIAction::PreviewPrevious,0,306,756,false);
-        Text(Character,TEXT("PreviewValue"),TEXT("Idle"),TEXT("Bezczynność"),370,773,282,38,15,Muted,false,true);
+        Text(Character,TEXT("PreviewValue"),TEXT("Idle"),TEXT("Bezczynność"),370,765,282,38,15,Muted,false,true);
         Arrow(Character,TEXT("PreviewNext"),EErlingUIAction::PreviewNext,0,660,756,true);
         Button(Character,TEXT("CharacterBackButton"),EErlingUIAction::Back,TEXT("Back"),TEXT("Wstecz"),TEXT("T_UI_Icon_ArrowLeft_White"),36,842,298,74);
         Button(Pages[1],TEXT("SaveAppearanceButton"),EErlingUIAction::SaveAppearance,TEXT("Save appearance"),TEXT("Zapisz wygląd"),TEXT(""),1502,928,350,82,true);
         Image(Pages[1],TEXT("T_UI_Panel_Dark"),1062,1017,660,53,.8f);
-        Text(Pages[1],TEXT(""),TEXT("Drag to rotate  ·  Scroll to zoom"),TEXT("Przeciągnij, aby obrócić  ·  Kółko myszy: zoom"),1082,1031,620,30,16,Muted,false,true);
+        Text(Pages[1],TEXT(""),TEXT("Drag to rotate  ·  Scroll to zoom"),TEXT("Przeciągnij, aby obrócić  ·  Kółko myszy: zoom"),1082,1028,620,30,16,Muted,false,true);
 
         auto* Goals=Canvas(Pages[2],TEXT("GoalsPanel"),782,32,356,90);
         Image(Goals,TEXT("T_UI_HUD_Goals_Backplate"),0,0,356,90);
-        Text(Goals,TEXT(""),TEXT("GOALS"),TEXT("GOLE"),40,24,180,52,27,White,true);
-        Text(Goals,TEXT("GoalsValue"),TEXT("00"),TEXT("00"),233,16,90,66,39,Pink,true,true);
+        Text(Goals,TEXT(""),TEXT("GOALS"),TEXT("GOLE"),40,16,180,52,27,White,true);
+        Text(Goals,TEXT("GoalsValue"),TEXT("00"),TEXT("00"),233,3,90,66,39,Pink,true,true);
         Image(Pages[2],TEXT("T_UI_Panel_Dark"),42,975,1810,90,.78f);
         auto* Hints=Canvas(Pages[2],TEXT("ControlHints"),70,1009,1780,42);
         Hint(Hints,0,206,TEXT("W A S D"),TEXT("move"),TEXT("ruch"));
         Hint(Hints,216,178,TEXT("CTRL"),TEXT("control"),TEXT("kontrola"));
         Hint(Hints,398,170,TEXT("SHIFT"),TEXT("sprint"),TEXT("sprint"));
         Hint(Hints,570,166,TEXT("SPACE"),TEXT("jump"),TEXT("skok"));
-        Hint(Hints,744,338,TEXT(""),TEXT("hold / release shot"),TEXT("przytrzymaj / puść strzał"),true);
+        Hint(Hints,744,338,TEXT(""),TEXT("shoot / pass"),TEXT("strzał / podanie"),true);
         Hint(Hints,1088,196,TEXT("RMB"),TEXT("slide"),TEXT("wślizg"));
         Hint(Hints,1290,215,TEXT("R"),TEXT("reset ball"),TEXT("reset piłki"));
         Hint(Hints,1520,176,TEXT("ESC"),TEXT("pause"),TEXT("pauza"));
@@ -443,7 +568,7 @@ public:
         Slider(Settings,TEXT("EffectsSlider"),TEXT("EffectsValue"),TEXT("Effects volume"),TEXT("Głośność efektów"),401);
         Slider(Settings,TEXT("SensitivitySlider"),TEXT("SensitivityValue"),TEXT("Mouse sensitivity"),TEXT("Czułość myszy"),501);
         SettingRow(Settings,TEXT("CameraButton"),EErlingUIAction::Camera,TEXT("Camera movement"),TEXT("Ruch kamery"),TEXT("CameraValue"),611);
-        SettingRow(Settings,TEXT("QualityButton"),EErlingUIAction::Quality,TEXT("Graphics quality"),TEXT("Jakość grafiki"),TEXT("QualityValue"),687);
+        SettingRow(Settings,TEXT("QualityButton"),EErlingUIAction::Quality,TEXT("Graphics Quality"),TEXT("Jakość grafiki"),TEXT("QualityValue"),687);
         SettingRow(Settings,TEXT("PauseSettingButton"),EErlingUIAction::PauseInSettings,TEXT("Pause in settings"),TEXT("Pauza w ustawieniach"),TEXT("PauseValue"),763);
         Button(Settings,TEXT("SaveSettingsButton"),EErlingUIAction::SaveSettings,TEXT("Save and back"),TEXT("Zapisz i wróć"),TEXT("T_UI_Icon_Check_Accent"),38,853,636,70,true);
 

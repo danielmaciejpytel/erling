@@ -527,6 +527,12 @@ void AFootballController::SetupInputComponent()
 	auto& B = InputComponent->BindAction(TEXT("Pause"), IE_Pressed, this, &AFootballController::PauseToggle);
 	B.bExecuteWhenPaused = true;
 }
+bool AFootballController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (Params.Event==IE_Pressed || Params.Event==IE_Repeat || !FMath::IsNearlyZero(Params.AmountDepressed))
+		bUsingGamepadInput=Params.IsGamepad();
+	return Super::InputKey(Params);
+}
 void AFootballController::Forward(float V)
 {
 	const bool NewPress = !FMath::IsNearlyZero(V) && !FMath::IsNearlyEqual(V, MoveForward);

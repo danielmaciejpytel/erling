@@ -9,6 +9,10 @@
 
 void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 {
+	static const TSet<FString> ShadedHairMeshes = {
+	    TEXT("SK_hair_top"), TEXT("SK_hair_back"), TEXT("SK_bun"), TEXT("SK_rubber")};
+	const bool bIsHair = Piece && Piece->GetSkeletalMeshAsset() &&
+	                     ShadedHairMeshes.Contains(Piece->GetSkeletalMeshAsset()->GetName());
 	Piece->SetLeaderPoseComponent(nullptr);
 	Piece->SetForcedLOD(1);
 	Piece->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
@@ -23,7 +27,10 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 	if (GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
 	{
 		Piece->SetRenderCustomDepth(true);
-		Piece->SetCustomDepthStencilValue(1);
+		// Stencil 2 adds internal strand ink; 1 keeps the shared silhouette.
+		const FString PieceName = Piece->GetSkeletalMeshAsset() ? Piece->GetSkeletalMeshAsset()->GetName() : FString();
+		const bool bStrandInk = bIsHair && PieceName != TEXT("SK_rubber");
+		Piece->SetCustomDepthStencilValue(bStrandInk ? 2 : 1);
 		for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
 		{
 			if (auto* Original = Piece->GetMaterial(Index))
@@ -33,6 +40,17 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 					Piece->SetMaterial(Index, Styled);
 			}
 		}
+	}
+	if (bIsHair)
+	{
+		if (auto* HairMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_hair_toon.M_hair_toon")))
+		{
+			Piece->SetCastShadow(true);
+			for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
+				Piece->SetMaterial(Index, HairMaterial);
+		}
+		else
+			UE_LOG(LogTemp, Error, TEXT("Missing /Game/Erling/Materials/M_hair_toon; save the hair toon material in Unreal Editor"));
 	}
 }
 bool AFootballPlayer::CanAct() const
