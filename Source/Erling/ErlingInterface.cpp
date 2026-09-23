@@ -7,15 +7,28 @@
 #include "Components/Slider.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/PanelWidget.h"
 #include "Components/ProgressBar.h"
+#include "Components/Image.h"
 #include "Framework/Application/SlateApplication.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Engine/Texture2D.h"
+#include "HAL/PlatformFileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "HAL/PlatformProcess.h"
 #include "InputCoreTypes.h"
+#if WITH_EDITOR
+#include "UObject/UnrealType.h"
+#endif
 
 void UErlingUIText::SetLanguage(bool bPolish)
 {
     const FText& Translation = bPolish ? Polish : English;
-    if (!GetText().EqualTo(Translation)) SetText(Translation);
+    const FText UppercaseTranslation = Translation.ToUpper();
+    if (!GetText().EqualTo(UppercaseTranslation)) SetText(UppercaseTranslation);
 }
 
 void UErlingUIButton::Connect(UErlingInterface* InInterface)
@@ -58,13 +71,42 @@ void UErlingInterface::NativeConstruct()
     if (auto* Slider = Cast<USlider>(GetWidgetFromName(TEXT("MusicSlider")))) Slider->OnValueChanged.AddUniqueDynamic(this, &UErlingInterface::MusicChanged);
     if (auto* Slider = Cast<USlider>(GetWidgetFromName(TEXT("EffectsSlider")))) Slider->OnValueChanged.AddUniqueDynamic(this, &UErlingInterface::EffectsChanged);
     if (auto* Slider = Cast<USlider>(GetWidgetFromName(TEXT("SensitivitySlider")))) Slider->OnValueChanged.AddUniqueDynamic(this, &UErlingInterface::SensitivityChanged);
+    BuildControllerHints();
     RefreshScreen();
 }
+
+void UErlingInterface::NativePreConstruct()
+{
+    Super::NativePreConstruct();
+    if (IsDesignTime()) ApplyDesignerPreview();
+}
+
+void UErlingInterface::ApplyDesignerPreview()
+{
+    if (!WidgetTree) return;
+    const bool bPolish = DesignerPreviewLanguage == EErlingDesignerPreviewLanguage::Polish;
+    TArray<UWidget*> Widgets;
+    WidgetTree->GetAllWidgets(Widgets);
+    for (UWidget* Widget : Widgets)
+        if (UErlingUIText* Text = Cast<UErlingUIText>(Widget)) Text->SetLanguage(bPolish);
+}
+
+#if WITH_EDITOR
+void UErlingInterface::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+    if (PropertyChangedEvent.GetPropertyName() == GET_MEMBER_NAME_CHECKED(UErlingInterface, DesignerPreviewLanguage))
+        ApplyDesignerPreview();
+}
+#endif
 
 void UErlingInterface::SetText(FName Name, const FString& Value)
 {
     if (UTextBlock* Text = Texts.FindRef(Name))
-        if (Text->GetText().ToString() != Value) Text->SetText(FText::FromString(Value));
+    {
+        const FText UppercaseValue = FText::FromString(Value).ToUpper();
+        if (!Text->GetText().EqualTo(UppercaseValue)) Text->SetText(UppercaseValue);
+    }
 }
 
 void UErlingInterface::RefreshScreen()
@@ -156,7 +198,123 @@ void UErlingInterface::NativeTick(const FGeometry& Geometry, float Dt)
     Entrance=FMath::Min(1.f, Entrance+Dt/0.18f);
     if (ScreenSwitcher) ScreenSwitcher->SetRenderOpacity(Entrance);
     for (const auto& Button : Buttons) Button->UpdateFocusStyle();
+    UpdateControllerHints();
     UpdateValues();
+}
+
+void UErlingInterface::BuildControllerHints()
+{
+    UCanvasPanel* Hints=Cast<UCanvasPanel>(GetWidgetFromName(TEXT("ControlHints")));
+    if(!Hints) return;
+
+    KeyboardHintWidgets.Reset();
+    const int32 Language=Controller&&Controller->Saved?Controller->Saved->Language:0;
+    TSet<UWidget*> KeyboardWidgets;
+    for(UWidget* Child:Hints->GetAllChildren())
+    {
+        KeyboardHintWidgets.Add(Child);
+        KeyboardWidgets.Add(Child);
+    }
+
+    // Some saved widget versions kept the mouse-button prompt in a sibling
+    // canvas instead of under ControlHints. Capture that complete prompt group
+    // too, so it cannot remain visible alongside the Xbox row.
+    TArray<UWidget*> AllWidgets;
+    if(WidgetTree) WidgetTree->GetAllWidgets(AllWidgets);
+    for(UWidget* Widget:AllWidgets)
+        if(UImage* Image=Cast<UImage>(Widget))
+            if(const UObject* Resource=Image->GetBrush().GetResourceObject();Resource&&Resource->GetName()==TEXT("T_UI_Mouse_Outline"))
+                if(UPanelWidget* Parent=Image->GetParent())
+                    for(UWidget* Sibling:Parent->GetAllChildren())
+                        if(Sibling&&!KeyboardWidgets.Contains(Sibling))
+                        {
+                            KeyboardWidgets.Add(Sibling);
+                            KeyboardHintWidgets.Add(Sibling);
+                        }
+
+    UTextBlock* StyleText=nullptr;
+    for(UWidget* Child:KeyboardHintWidgets)
+        if((StyleText=Cast<UTextBlock>(Child))) break;
+    const FSlateFontInfo HintFont=StyleText?StyleText->GetFont():FSlateFontInfo();
+    const FSlateColor HintColor=StyleText?StyleText->GetColorAndOpacity():FSlateColor(FLinearColor::White);
+
+    struct FControllerHint { const TCHAR* File; const TCHAR* En; const TCHAR* Pl; float X; float LabelWidth; };
+    const FControllerHint HintsToBuild[]={
+        {TEXT("analog.png"),TEXT("move"),TEXT("ruch"),18,140},
+        {TEXT("lt.png"),TEXT("control"),TEXT("kontrola"),270,135},
+        {TEXT("rt.png"),TEXT("sprint"),TEXT("sprint"),526,120},
+        {TEXT("a.png"),TEXT("jump"),TEXT("skok"),770,105},
+        {TEXT("x.png"),TEXT("shoot / pass"),TEXT("strzał / podanie"),996,240},
+        {TEXT("b.png"),TEXT("slide"),TEXT("wślizg"),1345,115},
+        {TEXT("menu.png"),TEXT("menu"),TEXT("menu"),1570,112}
+    };
+    const FString IconDirectory=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/XboxController");
+    IImageWrapperModule& ImageModule=FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+    for(const FControllerHint& Hint:HintsToBuild)
+    {
+        TArray<uint8> Compressed,Pixels;
+        if(!FFileHelper::LoadFileToArray(Compressed,*(IconDirectory/Hint.File))) continue;
+        TSharedPtr<IImageWrapper> Wrapper=ImageModule.CreateImageWrapper(EImageFormat::PNG);
+        if(!Wrapper.IsValid()||!Wrapper->SetCompressed(Compressed.GetData(),Compressed.Num())||!Wrapper->GetRaw(ERGBFormat::BGRA,8,Pixels)) continue;
+        UTexture2D* Texture=UTexture2D::CreateTransient(Wrapper->GetWidth(),Wrapper->GetHeight(),PF_B8G8R8A8);
+        if(!Texture) continue;
+        FTexture2DMipMap& Mip=Texture->GetPlatformData()->Mips[0];
+        void* Dest=Mip.BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(Dest,Pixels.GetData(),Pixels.Num());
+        Mip.BulkData.Unlock();
+        Texture->SRGB=true;
+        Texture->UpdateResource();
+        ControllerHintTextures.Add(Texture);
+
+        UImage* Icon=NewObject<UImage>(Hints);
+        Icon->SetBrushFromTexture(Texture,true);
+        Icon->SetVisibility(ESlateVisibility::HitTestInvisible);
+        if(UCanvasPanelSlot* CanvasSlot=Hints->AddChildToCanvas(Icon))
+        {
+            CanvasSlot->SetPosition(FVector2D(Hint.X,-5));
+            CanvasSlot->SetSize(FVector2D(64,64));
+        }
+        ControllerHintWidgets.Add(Icon);
+
+        UTextBlock* Label=NewObject<UTextBlock>(Hints);
+        Label->SetText(FText::FromString(Language==1?Hint.Pl:Hint.En));
+        Label->SetFont(HintFont);
+        Label->SetColorAndOpacity(HintColor);
+        Label->SetVisibility(ESlateVisibility::HitTestInvisible);
+        ControllerHintLabels.Add(Label);
+        if(UCanvasPanelSlot* CanvasSlot=Hints->AddChildToCanvas(Label))
+        {
+            // The face's visible capital height sits below the center of its slot.
+            // Lift the label so it centers optically in the HUD strip.
+            CanvasSlot->SetPosition(FVector2D(Hint.X+80,-1));
+            CanvasSlot->SetSize(FVector2D(Hint.LabelWidth,38));
+        }
+        ControllerHintWidgets.Add(Label);
+    }
+    bLastGamepadHint=!Controller||!Controller->bUsingGamepadInput;
+    UpdateControllerHints();
+}
+
+void UErlingInterface::UpdateControllerHints()
+{
+    if(ControllerHintWidgets.IsEmpty()) return;
+    const int32 Language=Controller&&Controller->Saved?Controller->Saved->Language:0;
+    if(LastControllerHintLanguage!=Language)
+    {
+        LastControllerHintLanguage=Language;
+        const TCHAR* English[]={TEXT("move"),TEXT("control"),TEXT("sprint"),TEXT("jump"),TEXT("shoot / pass"),TEXT("slide"),TEXT("menu")};
+        const TCHAR* Polish[]={TEXT("ruch"),TEXT("kontrola"),TEXT("sprint"),TEXT("skok"),TEXT("strzał / podanie"),TEXT("wślizg"),TEXT("menu")};
+        for(int32 Index=0;Index<ControllerHintLabels.Num();++Index)
+            if(ControllerHintLabels[Index]) ControllerHintLabels[Index]->SetText(FText::FromString(Language==1?Polish[Index]:English[Index]));
+    }
+    const bool bGamepad=Controller&&Controller->bUsingGamepadInput;
+    bLastGamepadHint=bGamepad;
+    const ESlateVisibility KeyboardVisibility=bGamepad?ESlateVisibility::Collapsed:ESlateVisibility::HitTestInvisible;
+    const ESlateVisibility ControllerVisibility=bGamepad?ESlateVisibility::HitTestInvisible:ESlateVisibility::Collapsed;
+    for(const TObjectPtr<UWidget>& Widget:KeyboardHintWidgets)
+        if(Widget&&Widget->GetVisibility()!=KeyboardVisibility) Widget->SetVisibility(KeyboardVisibility);
+    for(const TObjectPtr<UWidget>& Widget:ControllerHintWidgets)
+        if(Widget&&Widget->GetVisibility()!=ControllerVisibility) Widget->SetVisibility(ControllerVisibility);
 }
 
 void UErlingInterface::UpdateValues()

@@ -80,6 +80,7 @@ UCLASS() class ERLING_API AFootballController : public APlayerController {
  GENERATED_BODY()
 public:
  AFootballController(); virtual void BeginPlay() override; virtual void EndPlay(const EEndPlayReason::Type Reason) override; virtual void SetupInputComponent() override; virtual void Tick(float Dt) override;
+ virtual bool InputKey(const FInputKeyEventArgs& Params) override;
  enum class EScreen:uint8 { Main,Editor,Game,Pause,Settings,Credits };
  EScreen Screen=EScreen::Main,SettingsReturn=EScreen::Main;
  UPROPERTY() AFootballPlayer* Avatar=nullptr;
@@ -110,6 +111,7 @@ public:
  UPROPERTY(Config) float ShotBufferWindow=1.4f;
  int32 PreviewIndex=-1; void CycleAnimationPreview(int32 Direction); FText PreviewAnimationText()const;
  bool BallControlHeld=false; void BallControlOn(); void BallControlOff();
+ bool bUsingGamepadInput=false;
  bool HasDigitalMoveIntent()const; FVector GetMoveIntentWorld()const;
  #if !UE_BUILD_SHIPPING
  void RunChecks(); bool bRunLatestChecks=false; bool bRunProjectChecks=false;
