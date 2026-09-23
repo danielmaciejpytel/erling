@@ -2,6 +2,7 @@
 #include "ErlingAnimation.h"
 #include "ErlingInterface.h"
 #include "ErlingTuning.h"
+#include "ErlingStylizedGoal.h"
 #include "HAL/PlatformProcess.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundWave.h"
@@ -43,6 +44,16 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+static bool HasStylizedGoalAtEnd(const UObject* WorldContext, int32 Sign)
+{
+	TArray<AActor*> Goals;
+	UGameplayStatics::GetAllActorsOfClass(WorldContext, AErlingStylizedGoal::StaticClass(), Goals);
+	for (const AActor* Goal : Goals)
+		if (Goal && FMath::Abs(Goal->GetActorLocation().X - Sign * ErlingPitch::GoalLineX) < 100.f)
+			return true;
+	return false;
+}
+
 static const TCHAR* ProfileSlot()
 {
 	return (FParse::Param(FCommandLine::Get(), TEXT("ErlingTest")) || FParse::Param(FCommandLine::Get(), TEXT("ErlingTest_Latest")) ||
@@ -224,20 +235,25 @@ void AFootballMode::CreateField()
 	}
 	for (int S : {-1, 1})
 	{
+		const bool HasStylizedGoal = HasStylizedGoalAtEnd(this, S);
 		for (int Y : {-1, 1})
 		{
 			Line(FVector(S * 2400, Y * 650, 2), FVector(600, 8, 3));
-			Box(FVector(S * ErlingPitch::GoalLineX, Y * ErlingPitch::GoalPostY, ErlingPitch::CrossbarZ * .5f),
-			    FVector(18, 18, ErlingPitch::CrossbarZ), FLinearColor(.9f, .95f, 1));
+			if (!HasStylizedGoal)
+				Box(FVector(S * ErlingPitch::GoalLineX, Y * ErlingPitch::GoalPostY, ErlingPitch::CrossbarZ * .5f),
+				    FVector(18, 18, ErlingPitch::CrossbarZ), FLinearColor(.9f, .95f, 1));
 		}
 		Line(FVector(S * 2100, 0, 2), FVector(8, 1300, 3));
-		Box(FVector(S * ErlingPitch::GoalLineX, 0, ErlingPitch::CrossbarZ), FVector(18, ErlingPitch::GoalPostY * 2 + 20, 18),
-		    FLinearColor(.9f, .95f, 1));
-		for (int Y = -350; Y <= 350; Y += 50)
-			Box(FVector(S * ErlingPitch::NetBackX, Y, ErlingPitch::CrossbarZ * .5f), FVector(5, 3, ErlingPitch::CrossbarZ),
-			    FLinearColor(.48f, .58f, .62f), false);
-		for (int Z = 20; Z <= 260; Z += 40)
-			Box(FVector(S * ErlingPitch::NetBackX, 0, Z), FVector(5, ErlingPitch::GoalPostY * 2, 3), FLinearColor(.48f, .58f, .62f), false);
+		if (!HasStylizedGoal)
+		{
+			Box(FVector(S * ErlingPitch::GoalLineX, 0, ErlingPitch::CrossbarZ), FVector(18, ErlingPitch::GoalPostY * 2 + 20, 18),
+			    FLinearColor(.9f, .95f, 1));
+			for (int Y = -350; Y <= 350; Y += 50)
+				Box(FVector(S * ErlingPitch::NetBackX, Y, ErlingPitch::CrossbarZ * .5f), FVector(5, 3, ErlingPitch::CrossbarZ),
+				    FLinearColor(.48f, .58f, .62f), false);
+			for (int Z = 20; Z <= 260; Z += 40)
+				Box(FVector(S * ErlingPitch::NetBackX, 0, Z), FVector(5, ErlingPitch::GoalPostY * 2, 3), FLinearColor(.48f, .58f, .62f), false);
+		}
 	}
 	// Simple stands leave the gameplay area clear.
 	for (int S : {-1, 1})
@@ -1774,6 +1790,8 @@ void AFootballMode::CreateNetCollision()
 	};
 	for (int S : {-1, 1})
 	{
+		if (HasStylizedGoalAtEnd(this, S))
+			continue;
 		Net(FVector(S * ErlingPitch::NetBackX, 0, ErlingPitch::CrossbarZ * .5f),
 		    FVector(12, ErlingPitch::GoalPostY * 2, ErlingPitch::CrossbarZ));
 		for (int Y : {-1, 1})
@@ -1788,6 +1806,8 @@ void AFootballMode::NetHit(
 	if (HitComponent && OtherComp && OtherComp->ComponentHasTag(TEXT("GoalNet")))
 	{
 		auto V = HitComponent->GetPhysicsLinearVelocity();
+		if (auto* Goal = Cast<AErlingStylizedGoal>(OtherComp->GetOwner()))
+			Goal->ReactToBall(OtherComp, HitComponent, Hit.ImpactPoint, V.Size());
 		HitComponent->SetPhysicsLinearVelocity(FVector(0, 0, FMath::Min(V.Z, 0.f)));
 		HitComponent->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
 	}
