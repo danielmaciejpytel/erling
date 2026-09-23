@@ -62,6 +62,7 @@ public:
  UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
  void CreateNetCollision(); void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
  int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
+ UFUNCTION(BlueprintPure, Category="Football|Validation") int32 GetGoalCountForValidation() const { return Goals; }
  /** Possession / dribbling state and logic (see ErlingBallPossession.h). */
  UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingBallPossession> Possession;
  void Dribble(AFootballPlayer* Player,float Dt){Possession->Dribble(Player,Dt);}
