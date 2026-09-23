@@ -27,10 +27,20 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 	if (GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
 	{
 		Piece->SetRenderCustomDepth(true);
-		// Stencil 2 adds internal strand ink; 1 keeps the shared silhouette.
+		// Separate part masks keep garment seams visible without shading smooth skin.
+		// 1: face/ball/accessories, 2: hair, 3: body, 4: shirt, 5: pants, 6: shoes.
 		const FString PieceName = Piece->GetSkeletalMeshAsset() ? Piece->GetSkeletalMeshAsset()->GetName() : FString();
 		const bool bStrandInk = bIsHair && PieceName != TEXT("SK_rubber");
-		Piece->SetCustomDepthStencilValue(bStrandInk ? 2 : 1);
+		int32 InkMask = bStrandInk ? 2 : 1;
+		if (PieceName == TEXT("SK_body"))
+			InkMask = 3;
+		else if (PieceName == TEXT("SK_shirt"))
+			InkMask = 4;
+		else if (PieceName == TEXT("SK_pants"))
+			InkMask = 5;
+		else if (PieceName == TEXT("SK_shoe"))
+			InkMask = 6;
+		Piece->SetCustomDepthStencilValue(InkMask);
 		for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
 		{
 			if (auto* Original = Piece->GetMaterial(Index))
