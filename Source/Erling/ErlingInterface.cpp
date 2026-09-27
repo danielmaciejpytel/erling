@@ -403,12 +403,33 @@ void UErlingInterface::UpdateValues()
         SetText(TEXT("GoalsValue"),FString::Printf(TEXT("%02d"),Mode?Mode->Goals:0));
         if (Shot)
         {
-            const float Charge=C->Charging?FMath::Min(1.5f,GetWorld()->GetTimeSeconds()-C->ChargeStarted):C->ShotBufferSeconds;
-            FString State=Charge>=1.35f?L(TEXT("OVER THE BAR!"),TEXT("ZA WYSOKO!")):Charge>=.85f&&Charge<=1.02f?L(TEXT("UNDER THE BAR"),TEXT("POD POPRZECZKĘ")):Charge>=.35f?L(TEXT("POWER SHOT"),TEXT("MOCNY STRZAŁ")):L(TEXT("PASS"),TEXT("PODANIE"));
+            const float Charge=C->GetShotChargePower();
+            const FErlingShotEvaluation Evaluation=C->EvaluateShot(Charge,C->Charging?C->ShotChargeAimDirection:C->ShotBufferAimDirection);
+            FString State=L(TEXT("PASS"),TEXT("PODANIE"));
+            FLinearColor FillColor=FLinearColor::FromSRGBColor(FColor(218,91,145));
+            switch (Evaluation.Kind)
+            {
+            case EErlingShotKind::Pass: break;
+            case EErlingShotKind::Power:
+                State=L(TEXT("POWER SHOT"),TEXT("MOCNY STRZAŁ"));
+                break;
+            case EErlingShotKind::UnderBar:
+                State=L(TEXT("UNDER THE BAR"),TEXT("POD POPRZECZKĘ"));
+                FillColor=FLinearColor::FromSRGBColor(FColor(86,176,115));
+                break;
+            case EErlingShotKind::TooHigh:
+                State=L(TEXT("OVER THE BAR!"),TEXT("ZA WYSOKO!"));
+                FillColor=FLinearColor::FromSRGBColor(FColor(232,92,64));
+                break;
+            }
             if (C->ShotBufferActive) State+=L(TEXT(" · QUEUED"),TEXT(" · OCZEKUJE"));
             SetText(TEXT("ShotValue"),State);
-            if (auto* Bar=Cast<UProgressBar>(GetWidgetFromName(TEXT("ShotFill")))) Bar->SetPercent(Charge/1.5f);
-            if (auto* Bar=Cast<UProgressBar>(GetWidgetFromName(TEXT("PlayerShotFill")))) Bar->SetPercent(Charge/1.5f);
+            for (const TCHAR* Name : {TEXT("ShotFill"),TEXT("PlayerShotFill")})
+                if (auto* Bar=Cast<UProgressBar>(GetWidgetFromName(Name)))
+                {
+                    Bar->SetPercent(ErlingShot::ChargeFraction(Charge));
+                    Bar->SetFillColorAndOpacity(FillColor);
+                }
         }
     }
     FString Message;
