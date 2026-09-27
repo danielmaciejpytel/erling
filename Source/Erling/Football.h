@@ -5,6 +5,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/SaveGame.h"
 #include "ErlingBallPossession.h"
+#include "ErlingShot.h"
 #include "Football.generated.h"
 
 class UStaticMeshComponent; class USkeletalMeshComponent; class UMaterialInstanceDynamic; class UAnimSequence; class ACameraActor; class UErlingInterface;
@@ -93,9 +94,12 @@ public:
  void PlayEffect(const FString& Name,float Gain=1.f); void UpdateEffectsVolume(float V);
  float EditorZoom=0; bool Dragging=false,MouseWasDown=false; float LastMouseX=0;
  bool Charging=false,ShotChargeArmed=false,ShotBufferActive=false;
+ // Buffer power stays in the ballistic curve's 0..1.5 range, independent of button hold duration.
  float ChargeStarted=0,ShotBufferStarted=0,ShotBufferSeconds=0;
  FVector ShotChargeAimDirection=FVector::ZeroVector,ShotBufferAimDirection=FVector::ZeroVector;
  void StartCharge(); void ReleaseCharge(); void FireShot(float Seconds,FVector AimOverride=FVector::ZeroVector); void UpdateDemo(float Dt);
+ float GetShotChargePower()const;
+ FErlingShotEvaluation EvaluateShot(float PowerSeconds,FVector AimOverride=FVector::ZeroVector)const;
  int DemoDirection=1,DemoPhase=0,DemoShotDistanceIndex=-1; float DemoShotAt=0,DemoShotTargetX=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);

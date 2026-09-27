@@ -4,6 +4,8 @@
 #include "Football.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Slider.h"
+#include "Components/ProgressBar.h"
+#include "ErlingShot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
@@ -23,6 +25,38 @@
 // Opt-in end-to-end checks run against ErlingProfile_Test, never the player's save.
 void UErlingInterface::RunUIChecks()
 {
+    if(FParse::Param(FCommandLine::Get(),TEXT("ShotsOnly")))
+    {
+        auto* C=Controller.Get();
+        if(!C||(!C->Charging&&!C->ShotBufferActive))return;
+        UpdateValues();
+        const float Power=C->GetShotChargePower();
+        const auto Evaluation=C->EvaluateShot(Power,C->Charging?C->ShotChargeAimDirection:C->ShotBufferAimDirection);
+        auto CheckShotUI=[C](const TCHAR* Name,bool Passed)
+        {
+            const FString Line=FString::Printf(TEXT("%s: %s\n"),Name,Passed?TEXT("PASS"):TEXT("FAIL"));
+            C->Report+=Line;UE_LOG(LogTemp,Display,TEXT("SHOT_CHECK %s"),*Line);
+        };
+        FString Expected=Evaluation.Kind==EErlingShotKind::Pass?C->Localize(TEXT("PASS"),TEXT("PODANIE")):
+            Evaluation.Kind==EErlingShotKind::Power?C->Localize(TEXT("POWER SHOT"),TEXT("MOCNY STRZAŁ")):
+            Evaluation.Kind==EErlingShotKind::UnderBar?C->Localize(TEXT("UNDER THE BAR"),TEXT("POD POPRZECZKĘ")):
+            C->Localize(TEXT("OVER THE BAR!"),TEXT("ZA WYSOKO!"));
+        if(C->ShotBufferActive)Expected+=C->Localize(TEXT(" · QUEUED"),TEXT(" · OCZEKUJE"));
+        const auto* Label=Cast<UTextBlock>(GetWidgetFromName(TEXT("ShotValue")));
+        const auto* TopBar=Cast<UProgressBar>(GetWidgetFromName(TEXT("ShotFill")));
+        const auto* PlayerBar=Cast<UProgressBar>(GetWidgetFromName(TEXT("PlayerShotFill")));
+        CheckShotUI(TEXT("shot_ui_label_matches_launch_kind"),Label&&Label->GetText().ToString()==Expected);
+        CheckShotUI(TEXT("shot_ui_both_bars_match_frozen_power"),TopBar&&PlayerBar&&
+            FMath::IsNearlyEqual(TopBar->GetPercent(),Power/1.5f,.001f)&&FMath::IsNearlyEqual(PlayerBar->GetPercent(),TopBar->GetPercent(),.001f));
+        if(TopBar&&PlayerBar)
+        {
+            const FLinearColor Color=TopBar->GetFillColorAndOpacity();
+            CheckShotUI(TEXT("shot_ui_both_bars_match_kind_color"),Color.Equals(PlayerBar->GetFillColorAndOpacity(),.001f)&&
+                (Evaluation.Kind!=EErlingShotKind::UnderBar||Color.G>Color.R)&&
+                (Evaluation.Kind!=EErlingShotKind::TooHigh||Color.R>Color.G));
+        }
+        return;
+    }
     if(!FParse::Param(FCommandLine::Get(),TEXT("ErlingUITest"))) return;
     const double Now=FPlatformTime::Seconds();
     if(NextCheck==0) { NextCheck=Now+6;return; }
@@ -126,7 +160,7 @@ void UErlingInterface::RunUIChecks()
     case 11:UppercaseText();Check(TEXT("credits_screen"),C->Screen==S::Credits);Bounds(TEXT("credits_bounds"));Shot(TEXT("05_Credits_PL"));break;
     case 12:Click(TEXT("CreditsBackButton"));Click(TEXT("PlayButton"));Check(TEXT("game_input_restored"),C->Screen==S::Game&&!C->IsPaused()&&!C->bShowMouseCursor);GetWorld()->GetAuthGameMode<AFootballMode>()->Goals=7;break;
     case 13:UppercaseText();Check(TEXT("live_score"),Texts.FindRef(TEXT("GoalsValue"))->GetText().ToString()==TEXT("07"));Shot(TEXT("06_HUD_PL"));break;
-    case 14:C->Charging=true;C->ChargeStarted=GetWorld()->GetTimeSeconds()-.9f;UpdateValues();Shot(TEXT("07_Shot_PL"));break;
+    case 14:C->Charging=true;C->ChargeStarted=GetWorld()->GetTimeSeconds()-ErlingShot::HoldSecondsFromPower(.9f);UpdateValues();Shot(TEXT("07_Shot_PL"));break;
     case 15:C->Charging=false;C->PauseToggle();break;
     case 16:UppercaseText();Check(TEXT("pause_screen"),C->Screen==S::Pause&&C->IsPaused()&&C->bShowMouseCursor);Bounds(TEXT("pause_bounds"));Shot(TEXT("08_Pause_PL"));break;
     case 17:Key(EKeys::Tab);Check(TEXT("keyboard_tab_navigation"),GetWidgetFromName(TEXT("PauseSettingsButton"))->HasAnyUserFocus());Click(TEXT("PauseSettingsButton"));Check(TEXT("settings_from_pause"),C->Screen==S::Settings&&C->SettingsReturn==S::Pause&&C->IsPaused());Click(TEXT("SaveSettingsButton"));Check(TEXT("return_to_pause"),C->Screen==S::Pause&&C->IsPaused());Click(TEXT("ResumeButton"));Check(TEXT("resume_game"),C->Screen==S::Game&&!C->IsPaused());break;

@@ -93,7 +93,8 @@ void AFootballPlayer::BeginPlay()
 }
 void AFootballPlayer::InitializeAssets()
 {
-	if (GetMesh()->GetSkeletalMeshAsset() && Face->GetSkeletalMeshAsset() && FaceMaterial && Animations.Num() == 24)
+	if (GetMesh()->GetSkeletalMeshAsset() && Face->GetSkeletalMeshAsset() && FaceMaterial && Animations.Num() == 25 &&
+	    Animations.Contains(TEXT("Idle_Relaxed")))
 		return;
 	if (!GetMesh()->GetSkeletalMeshAsset())
 		GetMesh()->SetSkeletalMesh(LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Erling/Meshes/SK_body.SK_body")));
@@ -112,9 +113,10 @@ void AFootballPlayer::InitializeAssets()
 			Face->SetMaterial(0, FaceMaterial);
 		}
 	}
-	for (auto N : {TEXT("Idle_Breathe"), TEXT("Idle_LookAround"), TEXT("Idle_WeightShift"), TEXT("Walk"), TEXT("Run"), TEXT("Sprint"),
+	Animations.Remove(TEXT("Idle_LookAround"));
+	for (auto N : {TEXT("Idle_Breathe"), TEXT("Idle_Relaxed"), TEXT("Idle_WeightShift"), TEXT("Walk"), TEXT("Run"), TEXT("Sprint"),
 	         TEXT("Kick_Right"), TEXT("Kick_Left"), TEXT("Jump"), TEXT("Jump_Run"), TEXT("JoyJump_Run"), TEXT("JoyJump_Standing"),
-	         TEXT("Shot_Flip_Land"), TEXT("Slide_From_Run"), TEXT("Trip_Roll_From_Run"), TEXT("Celebrate_Victory"), TEXT("Dance_Disco"),
+	         TEXT("Salto"), TEXT("Salto_Shoot"), TEXT("Slide_From_Run"), TEXT("Trip_Roll_From_Run"), TEXT("Celebrate_Victory"), TEXT("Dance_Disco"),
 	         TEXT("Dance_Robot"), TEXT("Fall_Backward"), TEXT("GetUp_Back"), TEXT("GetUp_Front"), TEXT("Meme_RageStomp"),
 	         TEXT("Meme_Shrug"), TEXT("Turn_Step")})
 	{
@@ -661,12 +663,16 @@ void AFootballController::StartCharge()
 	ChargeStarted = Now;
 	ShotChargeAimDirection = Avatar->GetActorForwardVector().GetSafeNormal2D();
 }
+float AFootballController::GetShotChargePower() const
+{
+	return Charging ? ErlingShot::PowerFromHoldSeconds(GetWorld()->GetTimeSeconds() - ChargeStarted) : ShotBufferSeconds;
+}
 void AFootballController::ReleaseCharge()
 {
 	if (!Charging)
 		return;
 	const float Now = GetWorld()->GetTimeSeconds();
-	const float Seconds = FMath::Min(1.5f, Now - ChargeStarted);
+	const float Seconds = GetShotChargePower();
 	const FVector ChargedAim = ShotChargeAimDirection;
 	Charging = false;
 	if (Screen != EScreen::Game || !ShotChargeArmed)
@@ -702,16 +708,14 @@ void AFootballController::Kick()
 {
 	FireShot(.5f);
 }
-void AFootballController::FireShot(float Seconds, FVector AimOverride)
+FErlingShotEvaluation AFootballController::EvaluateShot(float PowerSeconds, FVector AimOverride) const
 {
+	FErlingShotEvaluation Shot;
 	auto* M = GetWorld()->GetAuthGameMode<AFootballMode>();
+	if (!Avatar || !M || !M->Ball)
+		return Shot;
 	const EScreen ActiveScreen = Screen == EScreen::Settings ? SettingsReturn : Screen;
 	const bool Demo = ActiveScreen == EScreen::Main || ActiveScreen == EScreen::Credits;
-	if ((ActiveScreen != EScreen::Game && !Demo) || !Avatar || !M || !Avatar->CanAct() || !M->HasBall(Avatar))
-		return;
-	const float Now = GetWorld()->GetTimeSeconds();
-	if (Now < KickCooldown)
-		return;
 	const FVector BallPosition = M->Ball->GetComponentLocation();
 	FVector ShotDirection = !AimOverride.IsNearlyZero() ? AimOverride.GetSafeNormal2D() : Avatar->GetActorForwardVector();
 	const FVector CurrentIntent = !Demo ? GetMoveIntentWorld() : FVector::ZeroVector;
@@ -726,56 +730,77 @@ void AFootballController::FireShot(float Seconds, FVector AimOverride)
 	}
 	else if (UseRememberedDirection)
 		ShotDirection = M->Possession->LastPossessionDirection.GetSafeNormal2D();
-	PendingVelocity = AFootballMode::ShotVelocity(BallPosition, ShotDirection, Seconds);
+	Shot.Velocity = AFootballMode::ShotVelocity(BallPosition, ShotDirection, PowerSeconds);
 	// Digital WASD has only eight directions. Treat those directions as shot intent,
 	// not literal 45-degree ballistics: preserve the selected side but compress it
 	// into the mouth of the goal, similar to an assisted football-game shot model.
-	if (!Demo && DigitalShotIntent && FMath::Abs(PendingVelocity.X) > 1.f)
+	if (!Demo && DigitalShotIntent && FMath::Abs(Shot.Velocity.X) > 1.f)
 	{
-		const float GoalX = PendingVelocity.X > 0 ? ErlingPitch::GoalLineX : -ErlingPitch::GoalLineX;
+		const float GoalX = ErlingPitch::GoalLineFor(Shot.Velocity.X);
 		const FVector GoalDirection = (FVector(GoalX, 0, BallPosition.Z) - BallPosition).GetSafeNormal2D();
-		const FVector RawDirection = PendingVelocity.GetSafeNormal2D();
+		const FVector RawDirection = Shot.Velocity.GetSafeNormal2D();
 		if (FVector::DotProduct(RawDirection, GoalDirection) > .25f)
 		{
-			const float RawFlight = (GoalX - BallPosition.X) / PendingVelocity.X;
+			const float RawFlight = (GoalX - BallPosition.X) / Shot.Velocity.X;
 			if (RawFlight > 0.f)
 			{
-				const float RawSide = BallPosition.Y + PendingVelocity.Y * RawFlight;
+				const float RawSide = BallPosition.Y + Shot.Velocity.Y * RawFlight;
 				constexpr float AimMargin = 292.f;
 				const float AssistedSide = RawSide * AimMargin / FMath::Sqrt(RawSide * RawSide + AimMargin * AimMargin);
 				const FVector AssistedDirection = (FVector(GoalX, AssistedSide, BallPosition.Z) - BallPosition).GetSafeNormal2D();
-				PendingVelocity = AFootballMode::ShotVelocity(BallPosition, AssistedDirection, Seconds);
+				Shot.Velocity = AFootballMode::ShotVelocity(BallPosition, AssistedDirection, PowerSeconds);
 			}
 		}
 	}
 	float CrossingHeight = -1, CrossingSide = MAX_flt;
-	if (FMath::Abs(PendingVelocity.X) > 1)
+	bool HasCrossing = false;
+	if (FMath::Abs(Shot.Velocity.X) > 1)
 	{
-		const float GoalX = PendingVelocity.X > 0 ? ErlingPitch::GoalLineX : -ErlingPitch::GoalLineX;
-		const float Flight = (GoalX - BallPosition.X) / PendingVelocity.X;
+		const float GoalX = ErlingPitch::GoalLineFor(Shot.Velocity.X);
+		const float Flight = (GoalX - BallPosition.X) / Shot.Velocity.X;
 		if (Flight > 0)
 		{
-			CrossingHeight = BallPosition.Z + PendingVelocity.Z * Flight + .5f * GetWorld()->GetGravityZ() * Flight * Flight;
-			CrossingSide = BallPosition.Y + PendingVelocity.Y * Flight;
+			CrossingHeight = BallPosition.Z + Shot.Velocity.Z * Flight + .5f * GetWorld()->GetGravityZ() * Flight * Flight;
+			CrossingSide = BallPosition.Y + Shot.Velocity.Y * Flight;
+			HasCrossing = true;
 		}
 	}
-	PendingHasAim = CrossingHeight >= 0 && FMath::Abs(CrossingSide) < 5000;
-	PendingAimTarget = FVector(ErlingPitch::GoalLineFor(PendingVelocity.X), CrossingSide, CrossingHeight);
-	const bool Aimed = FMath::Abs(CrossingSide) < ErlingPitch::AimedHalfWidth;
-	const bool UnderBar = PendingVelocity.Size2D() >= 2600 && CrossingHeight >= 180 && CrossingHeight <= 228;
-	const bool AboveBar = Aimed && Seconds >= 1.35f && CrossingHeight - 22 > 269;
+	Shot.bHasAim = CrossingHeight >= 0 && FMath::Abs(CrossingSide) < 5000;
+	Shot.AimTarget = FVector(ErlingPitch::GoalLineFor(Shot.Velocity.X), CrossingSide, CrossingHeight);
+	Shot.Kind = ErlingShot::Classify(PowerSeconds, Shot.Velocity.Size2D(), HasCrossing, CrossingHeight);
+	return Shot;
+}
+void AFootballController::FireShot(float Seconds, FVector AimOverride)
+{
+	auto* M = GetWorld()->GetAuthGameMode<AFootballMode>();
+	const EScreen ActiveScreen = Screen == EScreen::Settings ? SettingsReturn : Screen;
+	const bool Demo = ActiveScreen == EScreen::Main || ActiveScreen == EScreen::Credits;
+	if ((ActiveScreen != EScreen::Game && !Demo) || !Avatar || !M || !Avatar->CanAct() || !M->HasBall(Avatar))
+		return;
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < KickCooldown)
+		return;
+	const FVector BallPosition = M->Ball->GetComponentLocation();
+	const FErlingShotEvaluation Shot = EvaluateShot(Seconds, AimOverride);
+	PendingVelocity = Shot.Velocity;
+	PendingHasAim = Shot.bHasAim;
+	PendingAimTarget = Shot.AimTarget;
+	const bool Aimed = FMath::Abs(PendingAimTarget.Y) < ErlingPitch::AimedHalfWidth;
+	const bool AboveBar = Aimed && Seconds >= 1.35f && PendingAimTarget.Z - 22 > 269;
 	// Perfect under-bar timing immediately selects the flip, regardless of whether the shot eventually scores.
-	const bool Flip = !Demo && UnderBar;
+	const bool Flip = !Demo && Shot.Kind == EErlingShotKind::UnderBar;
 	PendingTrip = !Demo && AboveBar && FMath::FRand() < TripChance;
 	const FVector ShotPlanarDirection = PendingVelocity.GetSafeNormal2D();
 	const FVector ShotRight = ShotPlanarDirection.IsNearlyZero() ? Avatar->GetActorRightVector()
 	                                                             : FRotationMatrix(ShotPlanarDirection.Rotation()).GetUnitAxis(EAxis::Y);
 	const bool Left = FVector::DotProduct(BallPosition - Avatar->GetActorLocation(), ShotRight) < 0;
-	const FString Clip = Flip ? TEXT("Shot_Flip_Land") : Left ? TEXT("Kick_Left") : TEXT("Kick_Right");
+	const FString Clip = Flip ? TEXT("Salto_Shoot") : Left ? TEXT("Kick_Left") : TEXT("Kick_Right");
 	ShotEntryVelocity = Avatar->GetVelocity();
 	ShotEntryVelocity.Z = 0;
 	const float Rate = Flip ? 2.6f : 2.2f;
-	if (!Avatar->StartAction(Flip ? AFootballPlayer::EAction::Flip : AFootballPlayer::EAction::Kick, Clip, Rate))
+	const float FlipContactFraction = .36f * .43f;
+	if (!Avatar->StartAction(Flip ? AFootballPlayer::EAction::Flip : AFootballPlayer::EAction::Kick, Clip, Rate,
+	                         Flip ? FlipContactFraction : 0.f))
 		return;
 	if (Flip)
 	{
@@ -787,7 +812,7 @@ void AFootballController::FireShot(float Seconds, FVector AimOverride)
 	ShotBallStart = BallPosition;
 	ShotActorStart = Avatar->GetActorLocation();
 	const float Length = Avatar->Animations.FindRef(Clip)->GetPlayLength();
-	ShotContactTime = Length * (Flip ? .36f * .43f : .43f) / Rate;
+	ShotContactTime = Flip ? 0.f : Length * .43f / Rate;
 	ShotRecoverTime = ShotContactTime + .1f;
 	PendingShot = true;
 	KickCooldown = Now + .3f;
@@ -1220,7 +1245,7 @@ void AFootballController::RunProjectChecks()
 			Avatar->ApplyKit(Selection, Catalog);
 			Check(TEXT("catalog_5_categories"), Catalog.Num() == 5);
 			Check(TEXT("body_loaded"), Avatar->GetMesh()->GetSkeletalMeshAsset() != nullptr);
-			Check(TEXT("animations_loaded"), Avatar->Animations.Num() == 24);
+			Check(TEXT("animations_loaded"), Avatar->Animations.Num() == 25);
 			Shot(TEXT("01_Main"));
 			break;
 		case 1:

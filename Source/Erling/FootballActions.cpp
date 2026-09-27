@@ -274,7 +274,7 @@ void AFootballPlayer::UpdateAction(float Dt)
 		PlaybackRate = 1;
 		IdleElapsed += Dt;
 		const int32 Phase = int32(IdleElapsed / 6.f) % 4;
-		SetAnimation(Phase == 1 ? TEXT("Idle_LookAround") : Phase == 3 ? TEXT("Idle_WeightShift") : TEXT("Idle_Breathe"));
+		SetAnimation(Phase == 3 ? TEXT("Idle_WeightShift") : TEXT("Idle_Breathe"));
 	}
 }
 void AFootballPlayer::StartPhysicalJump()
@@ -582,6 +582,7 @@ void AFootballController::CycleAnimationPreview(int32 Direction)
 {
 	TArray<FString> Names;
 	Avatar->Animations.GetKeys(Names);
+	Names.Remove(TEXT("Idle_LookAround"));
 	Names.Sort();
 	PreviewIndex = (PreviewIndex + Direction + Names.Num() + 1) % (Names.Num() + 1);
 	Avatar->ClearAction();
@@ -592,36 +593,49 @@ void AFootballController::CycleAnimationPreview(int32 Direction)
 	const bool Loop = Clip.StartsWith(TEXT("Idle_")) || Clip == TEXT("Walk") || Clip == TEXT("Run") || Clip == TEXT("Sprint") ||
 	                  Clip == TEXT("Dance_Robot");
 	Avatar->SetAnimation(Clip, Loop);
+	if (Clip == TEXT("Salto_Shoot"))
+		Avatar->AnimationTime = Avatar->Animations.FindRef(Clip)->GetPlayLength() * .36f * .43f;
 	Avatar->PlaybackRate = 1;
 }
 FText AFootballController::PreviewAnimationText() const
 {
+	if (!Avatar || !Avatar->PreviewAnimation)
+		return FText::FromString(Localize(TEXT("Idle"), TEXT("Bezczynność")));
+	// Static label maps can retain their old contents after Live Coding.
+	if (Avatar->CurrentAnimation == TEXT("Idle_Relaxed"))
+		return FText::FromString(Localize(TEXT("Relaxed Idle"), TEXT("Swobodna bezczynność")));
 	static const TMap<FString, FString> LabelsEn = {{TEXT("Walk"), TEXT("Walk")}, {TEXT("Run"), TEXT("Run")},
 	    {TEXT("Sprint"), TEXT("Sprint")}, {TEXT("Kick_Right"), TEXT("Right-Foot Kick")}, {TEXT("Kick_Left"), TEXT("Left-Foot Kick")},
 	    {TEXT("Jump"), TEXT("Jump")}, {TEXT("Jump_Run"), TEXT("Running Jump")}, {TEXT("JoyJump_Run"), TEXT("Running Celebration")},
-	    {TEXT("JoyJump_Standing"), TEXT("Jump for Joy")}, {TEXT("Shot_Flip_Land"), TEXT("Flip Shot")},
+	    {TEXT("JoyJump_Standing"), TEXT("Jump for Joy")}, {TEXT("Salto"), TEXT("Salto")},
+	    {TEXT("Salto_Shoot"), TEXT("Salto Shoot")},
 	    {TEXT("Slide_From_Run"), TEXT("Slide")}, {TEXT("Trip_Roll_From_Run"), TEXT("Trip and Roll")},
 	    {TEXT("Celebrate_Victory"), TEXT("Victory")}, {TEXT("Dance_Disco"), TEXT("Disco Dance")},
 	    {TEXT("Dance_Robot"), TEXT("Robot Dance")}, {TEXT("Fall_Backward"), TEXT("Backward Fall")},
 	    {TEXT("GetUp_Back"), TEXT("Get Up from Back")}, {TEXT("GetUp_Front"), TEXT("Get Up from Front")},
-	    {TEXT("Idle_Breathe"), TEXT("Breathing")}, {TEXT("Idle_LookAround"), TEXT("Looking Around")},
+	    {TEXT("Idle_Breathe"), TEXT("Breathing")}, {TEXT("Idle_Relaxed"), TEXT("Relaxed Idle")},
 	    {TEXT("Idle_WeightShift"), TEXT("Weight Shift")}, {TEXT("Meme_RageStomp"), TEXT("Rage Stomp")}, {TEXT("Meme_Shrug"), TEXT("Shrug")},
 	    {TEXT("Turn_Step"), TEXT("Step Turn")}};
 	static const TMap<FString, FString> LabelsPl = {{TEXT("Walk"), TEXT("Chód")}, {TEXT("Run"), TEXT("Bieg")},
 	    {TEXT("Sprint"), TEXT("Sprint")}, {TEXT("Kick_Right"), TEXT("Strzał prawą nogą")}, {TEXT("Kick_Left"), TEXT("Strzał lewą nogą")},
 	    {TEXT("Jump"), TEXT("Skok")}, {TEXT("Jump_Run"), TEXT("Skok z biegu")}, {TEXT("JoyJump_Run"), TEXT("Cieszynka w biegu")},
-	    {TEXT("JoyJump_Standing"), TEXT("Skok z radości")}, {TEXT("Shot_Flip_Land"), TEXT("Strzał z saltem")},
+	    {TEXT("JoyJump_Standing"), TEXT("Skok z radości")}, {TEXT("Salto"), TEXT("Salto")},
+	    {TEXT("Salto_Shoot"), TEXT("Salto — strzał")},
 	    {TEXT("Slide_From_Run"), TEXT("Wślizg")}, {TEXT("Trip_Roll_From_Run"), TEXT("Potknięcie i przewrót")},
 	    {TEXT("Celebrate_Victory"), TEXT("Zwycięstwo")}, {TEXT("Dance_Disco"), TEXT("Taniec disco")},
 	    {TEXT("Dance_Robot"), TEXT("Taniec robota")}, {TEXT("Fall_Backward"), TEXT("Upadek do tyłu")},
 	    {TEXT("GetUp_Back"), TEXT("Wstawanie z pleców")}, {TEXT("GetUp_Front"), TEXT("Wstawanie z brzucha")},
-	    {TEXT("Idle_Breathe"), TEXT("Oddychanie")}, {TEXT("Idle_LookAround"), TEXT("Rozglądanie się")},
+	    {TEXT("Idle_Breathe"), TEXT("Oddychanie")}, {TEXT("Idle_Relaxed"), TEXT("Swobodna bezczynność")},
 	    {TEXT("Idle_WeightShift"), TEXT("Przenoszenie ciężaru")}, {TEXT("Meme_RageStomp"), TEXT("Wściekłe tupanie")},
 	    {TEXT("Meme_Shrug"), TEXT("Wzruszenie ramion")}, {TEXT("Turn_Step"), TEXT("Obrót krokiem")}};
 	if (!Avatar || !Avatar->PreviewAnimation)
 		return FText::FromString(Localize(TEXT("Idle"), TEXT("Bezczynność")));
 	const auto& Labels = Saved && Saved->Language == 1 ? LabelsPl : LabelsEn;
-	return FText::FromString(Labels.FindRef(Avatar->CurrentAnimation));
+	if (const FString* Label = Labels.Find(Avatar->CurrentAnimation); Label && !Label->IsEmpty())
+		return FText::FromString(*Label);
+	return FText::FromString(Avatar->CurrentAnimation.IsEmpty()
+	    ? Localize(TEXT("Idle"), TEXT("Bezczynność"))
+	    : Avatar->CurrentAnimation.Replace(TEXT("_"), TEXT(" ")));
 }
 void AFootballController::BallControlOn()
 {
