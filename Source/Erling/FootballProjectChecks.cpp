@@ -123,21 +123,13 @@ void AFootballController::RunProjectChecks()
 			break;
 		case 4:
 			Shot(TEXT("03_Play"));
+			// Kick in this stage. The screenshot stalls the frame longer than the
+			// wall-clock delay to stage 5, so a game-time timer would not fire first.
+			if (Mode && Mode->Ball)
 			{
-				FTimerHandle ShotDelay;
-				GetWorldTimerManager().SetTimer(
-				    ShotDelay,
-				    [this, Mode]()
-				    {
-					    if (Mode && Mode->Ball)
-					    {
-						    Mode->Ball->SetWorldLocation(
-						        Avatar->GetActorLocation() + FVector(140, 0, -65), false, nullptr, ETeleportType::TeleportPhysics);
-						    Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
-						    Mode->Kick(Avatar);
-					    }
-				    },
-				    .1f, false);
+				Mode->Ball->SetWorldLocation(Avatar->GetActorLocation() + FVector(140, 0, -65), false, nullptr, ETeleportType::TeleportPhysics);
+				Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+				Mode->Kick(Avatar);
 			}
 			break;
 		case 5:
@@ -330,8 +322,14 @@ void AFootballController::RunProjectChecks()
 			ChangeScreen(EScreen::Game);
 			Mode->ResetBall();
 			Mode->Scored = true;
-			Mode->Ball->SetWorldLocation(FVector(2800, 0, 160), false, nullptr, ETeleportType::TeleportPhysics);
-			Mode->Ball->SetPhysicsLinearVelocity(FVector(3200, 0, 0));
+			// This tick still runs the demo update, which zeroes the ball's velocity.
+			// Launch it on the next tick, once the game screen is active.
+			GetWorldTimerManager().SetTimerForNextTick(
+			    [Mode]()
+			    {
+				    Mode->Ball->SetWorldLocation(FVector(2800, 0, 160), false, nullptr, ETeleportType::TeleportPhysics);
+				    Mode->Ball->SetPhysicsLinearVelocity(FVector(3200, 0, 0));
+			    });
 			break;
 		case 30:
 			Check(TEXT("net_stops_ball"), Mode->Ball->GetComponentLocation().X < 2980 && Mode->Ball->GetComponentLocation().X > 2800 &&
