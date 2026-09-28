@@ -88,9 +88,7 @@ void AFootballPlayer::InitializeAssets()
 	ConfigurePiece(Face);
 	if (!FaceMaterial)
 	{
-		if (auto M = LoadObject<UMaterialInterface>(nullptr, GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))
-		                                                         ? TEXT("/Game/Erling/ArtDirection/M_Face.M_Face")
-		                                                         : TEXT("/Game/Erling/Materials/M_Face.M_Face")))
+		if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/ArtDirection/M_Face.M_Face")))
 		{
 			FaceMaterial = UMaterialInstanceDynamic::Create(M, this);
 			Face->SetMaterial(0, FaceMaterial);

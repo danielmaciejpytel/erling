@@ -49,14 +49,11 @@ void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootball
 	FVector Cam, Target;
 	float Fov = 48;
 	const bool GameplayView = ActiveScreen == EScreen::Game || ActiveScreen == EScreen::Pause;
-	if (GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
-	{
-		auto& Look = ViewCamera->GetCameraComponent()->PostProcessSettings;
-		Look.bOverride_DepthOfFieldFocalDistance = true;
-		Look.DepthOfFieldFocalDistance = (!GameplayView && ActiveScreen != EScreen::Editor) ? 780.f : 0.f;
-		Look.bOverride_DepthOfFieldFstop = true;
-		Look.DepthOfFieldFstop = 4.f;
-	}
+	auto& Look = ViewCamera->GetCameraComponent()->PostProcessSettings;
+	Look.bOverride_DepthOfFieldFocalDistance = true;
+	Look.DepthOfFieldFocalDistance = (!GameplayView && ActiveScreen != EScreen::Editor) ? 780.f : 0.f;
+	Look.bOverride_DepthOfFieldFstop = true;
+	Look.DepthOfFieldFstop = 4.f;
 
 	if (GameplayView)
 	{
@@ -99,7 +96,7 @@ void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootball
 		ViewCamera->SetActorLocationAndRotation(Cam, (Target - Cam).Rotation());
 		ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView, Fov, Dt, 8.f));
 	}
-	else if (ActiveScreen != EScreen::Editor && GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
+	else if (ActiveScreen != EScreen::Editor)
 	{
 		// Low presentation camera keeps the existing football demo and saved wardrobe.
 		const FVector Side(.31f, .95f, 0);
