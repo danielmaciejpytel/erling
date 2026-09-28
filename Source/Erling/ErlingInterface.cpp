@@ -411,7 +411,7 @@ void UErlingInterface::UpdateValues()
     if (Game)
     {
         const auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
-        SetText(TEXT("GoalsValue"),FString::Printf(TEXT("%02d"),Mode?Mode->Goals:0));
+        SetText(TEXT("GoalsValue"),FString::Printf(TEXT("%02d"),Mode?Mode->Referee->Goals:0));
         if (Shot)
         {
             const float Charge=C->GetShotChargePower();

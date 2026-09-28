@@ -158,7 +158,7 @@ void UErlingInterface::RunUIChecks()
     case 9:Shot(TEXT("04_Settings_PL"));break;
     case 10:Click(TEXT("SaveSettingsButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("settings_persisted"),Loaded&&FMath::IsNearlyEqual(Loaded->Volume,.25f)&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.55f)&&FMath::IsNearlyEqual(Loaded->Sensitivity,1.65f,1.e-4f));}Click(TEXT("CreditsButton"));break;
     case 11:UppercaseText();Check(TEXT("credits_screen"),C->Screen==S::Credits);Bounds(TEXT("credits_bounds"));Shot(TEXT("05_Credits_PL"));break;
-    case 12:Click(TEXT("CreditsBackButton"));Click(TEXT("PlayButton"));Check(TEXT("game_input_restored"),C->Screen==S::Game&&!C->IsPaused()&&!C->bShowMouseCursor);GetWorld()->GetAuthGameMode<AFootballMode>()->Goals=7;break;
+    case 12:Click(TEXT("CreditsBackButton"));Click(TEXT("PlayButton"));Check(TEXT("game_input_restored"),C->Screen==S::Game&&!C->IsPaused()&&!C->bShowMouseCursor);GetWorld()->GetAuthGameMode<AFootballMode>()->Referee->Goals=7;break;
     case 13:UppercaseText();Check(TEXT("live_score"),Texts.FindRef(TEXT("GoalsValue"))->GetText().ToString()==TEXT("07"));Shot(TEXT("06_HUD_PL"));break;
     case 14:C->Charging=true;C->ChargeStarted=GetWorld()->GetTimeSeconds()-ErlingShot::HoldSecondsFromPower(.9f);UpdateValues();Shot(TEXT("07_Shot_PL"));break;
     case 15:C->Charging=false;C->PauseToggle();break;

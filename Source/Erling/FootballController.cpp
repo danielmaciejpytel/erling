@@ -285,7 +285,7 @@ void AFootballController::UpdateAvatarFacing(float Dt, EScreen ActiveScreen, AFo
 		FVector SprintChaseFacing = FVector::ZeroVector;
 		if (ActiveScreen == EScreen::Game && GameplayMode && GameplayMode->Ball &&
 		    (Sprint || (!GameplayMode->Possession->PossessionActive && !GetMoveIntentWorld().IsNearlyZero())) && Avatar->CanAct() &&
-		    !GameplayMode->Possession->BallStopRequested && !GameplayMode->Possession->BallStopped && !GameplayMode->ShotInFlight &&
+		    !GameplayMode->Possession->BallStopRequested && !GameplayMode->Possession->BallStopped && !GameplayMode->Referee->ShotInFlight &&
 		    !GameplayMode->Possession->SprintKickPending && Now >= GameplayMode->Possession->SprintContactUntil &&
 		    GameplayMode->IsRecoverableSprintTouch(Avatar))
 		{

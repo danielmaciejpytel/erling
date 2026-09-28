@@ -1,4 +1,5 @@
 #include "Football.h"
+#include "ErlingBall.h"
 #include "ErlingAnimation.h"
 #include "ErlingInterface.h"
 #include "ErlingTuning.h"
@@ -51,6 +52,7 @@ AFootballMode::AFootballMode()
 	DefaultPawnClass = AFootballPlayer::StaticClass();
 	PlayerControllerClass = AFootballController::StaticClass();
 	Possession = CreateDefaultSubobject<UErlingBallPossession>(TEXT("Possession"));
+	Referee = CreateDefaultSubobject<UErlingReferee>(TEXT("Referee"));
 }
 UStaticMeshComponent* AFootballMode::Box(const FVector& P, const FVector& Size, const FLinearColor& Color, bool Collision)
 {
@@ -73,39 +75,20 @@ void AFootballMode::BeginPlay()
 	Super::BeginPlay();
 	Box(FVector(0, 0, -55), FVector(20000, 20000, 100), FLinearColor(.04f, .18f, .08f));
 	GoalSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/Erling/Audio/goal.goal"));
-	auto A = GetWorld()->SpawnActor<AStaticMeshActor>(FVector(0, 0, 40), FRotator::ZeroRotator);
-	Ball = A->GetStaticMeshComponent();
-	Ball->SetMobility(EComponentMobility::Movable);
-	Ball->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
-	Ball->SetWorldScale3D(FVector(ErlingBall::MeshScale));
-	Ball->SetCollisionProfileName(TEXT("PhysicsActor"));
-	Ball->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	Ball->SetSimulatePhysics(true);
-	Ball->SetMassOverrideInKg(NAME_None, ErlingBall::MassKg);
-	Ball->SetLinearDamping(ErlingBall::LinearDamping);
-	Ball->SetAngularDamping(ErlingBall::AngularDamping);
-	Ball->BodyInstance.bUseCCD = true;
-	Ball->SetNotifyRigidBodyCollision(true);
-	Ball->OnComponentHit.AddDynamic(this, &AFootballMode::NetHit);
-	if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))
-		Ball->SetMaterial(0, M);
-	Ball->SetRenderCustomDepth(true);
-	Ball->SetCustomDepthStencilValue(1);
-	auto PM = NewObject<UPhysicalMaterial>(this);
-	PM->Restitution = ErlingBall::Restitution;
-	PM->Friction = ErlingBall::Friction;
-	Ball->SetPhysMaterialOverride(PM);
+	BallActor = GetWorld()->SpawnActor<AErlingBall>(FVector(0, 0, 40), FRotator::ZeroRotator);
+	BallActor->ConfigureLiveBall();
+	Ball = BallActor->GetStaticMeshComponent();
 	ResetBall();
 }
 void AFootballMode::ResetBall()
 {
 	if (!Ball)
 		return;
-	if (Scored || BallHidden || ShotInFlight)
+	if (Referee->Scored || Referee->BallHidden || Referee->ShotInFlight)
 		PreserveFinishedBall();
-	LastShooter.Reset();
-	BallHidden = false;
-	ShotInFlight = false;
+	Referee->LastShooter.Reset();
+	Referee->BallHidden = false;
+	Referee->ShotInFlight = false;
 	Possession->ResetState();
 	if (auto PC = Cast<AFootballController>(GetWorld()->GetFirstPlayerController()); PC && PC->Avatar)
 		PC->Avatar->CancelBallTrap();
@@ -115,9 +98,9 @@ void AFootballMode::ResetBall()
 	Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	Ball->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 	Ball->SetWorldLocation(FVector(0, 0, ErlingBall::RestHeight), false, nullptr, ETeleportType::TeleportPhysics);
-	Scored = false;
-	ResetAt = 0;
-	PreviousBall = Ball->GetComponentLocation();
+	Referee->Scored = false;
+	Referee->ResetAt = 0;
+	Referee->PreviousBall = Ball->GetComponentLocation();
 }
 FVector AFootballMode::ShotVelocity(const FVector& Position, const FVector& Direction, float Seconds)
 {
@@ -135,25 +118,13 @@ FVector AFootballMode::ShotVelocity(const FVector& Position, const FVector& Dire
 }
 void AFootballMode::Kick(AFootballPlayer* P, float Seconds)
 {
-	if (!Ball || !P || BallHidden || Scored || FVector::Dist2D(Ball->GetComponentLocation(), P->GetActorLocation()) > 240)
+	if (!Ball || !P || Referee->BallHidden || Referee->Scored || FVector::Dist2D(Ball->GetComponentLocation(), P->GetActorLocation()) > 240)
 		return;
-	LastShooter = P;
-	LastShot = GetWorld()->GetTimeSeconds();
-	ShotInFlight = true;
+	Referee->StartShot(P);
 	Ball->SetLinearDamping(.015f);
 	Ball->SetPhysicsLinearVelocity(ShotVelocity(Ball->GetComponentLocation(), P->GetActorForwardVector(), Seconds));
 	if (auto PC = Cast<AFootballController>(GetWorld()->GetFirstPlayerController()))
 		PC->PlayEffect(TEXT("kick"));
-}
-void AFootballMode::HideMiss()
-{
-	if (BallHidden)
-		return;
-	if (auto PC = Cast<AFootballController>(GetWorld()->GetFirstPlayerController()))
-		PC->PlayEffect(TEXT("fail"));
-	BallHidden = true;
-	Ball->SetLinearDamping(1.2f);
-	ResetAt = GetWorld()->GetTimeSeconds() + 1.2f;
 }
 void AFootballMode::Tick(float Dt)
 {
@@ -169,87 +140,18 @@ void AFootballMode::Tick(float Dt)
 	if (!GameplayActive)
 		return;
 	Dribble(PC->Avatar, Dt);
-	auto P = Ball->GetComponentLocation();
-	const FVector OldBall = PreviousBall;
-	PreviousBall = P;
-	float T = GetWorld()->GetTimeSeconds();
-	if (ResetAt > 0 && T >= ResetAt)
-	{
-		ResetBall();
-		return;
-	}
-	float CrossingY = P.Y, CrossingZ = P.Z;
-	const float Plane = ErlingPitch::GoalPlaneFor(P.X);
-	const bool Crossed = FMath::Abs(P.X) > ErlingPitch::GoalPlaneX && FMath::Abs(OldBall.X) <= ErlingPitch::GoalPlaneX;
-	if (Crossed && !FMath::IsNearlyEqual(P.X, OldBall.X))
-	{
-		const FVector Crossing = FMath::Lerp(OldBall, P, (Plane - OldBall.X) / (P.X - OldBall.X));
-		CrossingY = Crossing.Y;
-		CrossingZ = Crossing.Z;
-	}
-	if (!Scored && Crossed && FMath::Abs(CrossingY) < ErlingPitch::ScoringHalfWidth && CrossingZ < ErlingPitch::ScoringMaxZ &&
-	    CrossingZ > 0)
-	{
-		Goals++;
-		PC->OnGoal(LastShooter.Get());
-		PC->PlayEffect(TEXT("goal"), 1.5f);
-		Scored = true;
-		ResetAt = T + 1.5f;
-		PC->Toast = PC->Localize(TEXT("GOAL!  +1"), TEXT("GOL!  +1"));
-		PC->ToastUntil = T + 2;
-	}
-	if (!Scored && ShotInFlight && !BallHidden &&
-	    ((FMath::Abs(P.X) > ErlingPitch::GoalPlaneX) ||
-	        (FMath::Abs(P.X) > ErlingPitch::MissCheckX &&
-	            (FMath::Abs(P.Y) > ErlingPitch::ScoringHalfWidth || P.Z > ErlingPitch::ScoringMaxZ)) ||
-	        FMath::Abs(P.Y) > ErlingPitch::TouchlineY))
-		HideMiss();
-	if (P.Z < -200)
-		ResetBall();
+	Referee->Update(PC);
 }
 void AFootballMode::NetHit(
     UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (HitComponent && OtherComp && OtherComp->ComponentHasTag(TEXT("GoalNet")))
-	{
-		auto V = HitComponent->GetPhysicsLinearVelocity();
-		if (auto* Goal = Cast<AErlingStylizedGoal>(OtherComp->GetOwner()))
-			Goal->ReactToBall(OtherComp, HitComponent, Hit.ImpactPoint, V.Size());
-		HitComponent->SetPhysicsLinearVelocity(FVector(0, 0, FMath::Min(V.Z, 0.f)));
-		HitComponent->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
-	}
+	BallActor->NetHit(HitComponent, OtherActor, OtherComp, NormalImpulse, Hit);
 }
 void AFootballMode::PreserveFinishedBall()
 {
-	// Preserve the completed shot as an independent physical ball. Keep the live
-	// component stable so input/contact code never observes a newly initialized body.
-	auto* Old = Ball;
-	auto* Actor = GetWorld()->SpawnActor<AStaticMeshActor>(Old->GetComponentLocation(), Old->GetComponentRotation());
-	if (!Actor)
+	auto* Fresh = BallActor->SpawnFinishedCopy();
+	if (!Fresh)
 		return;
-	auto* Fresh = Actor->GetStaticMeshComponent();
-	Fresh->SetMobility(EComponentMobility::Movable);
-	Fresh->SetStaticMesh(Old->GetStaticMesh());
-	Fresh->SetWorldScale3D(Old->GetComponentScale());
-	for (int32 I = 0; I < Old->GetNumMaterials(); ++I)
-		Fresh->SetMaterial(I, Old->GetMaterial(I));
-	Fresh->SetCollisionProfileName(TEXT("PhysicsActor"));
-	Fresh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	Fresh->SetSimulatePhysics(true);
-	Fresh->SetMassOverrideInKg(NAME_None, ErlingBall::MassKg);
-	Fresh->SetAngularDamping(ErlingBall::AngularDamping);
-	Fresh->BodyInstance.bUseCCD = true;
-	Fresh->SetPhysMaterialOverride(Old->BodyInstance.GetSimplePhysicalMaterial());
-	Fresh->SetRenderCustomDepth(Old->bRenderCustomDepth);
-	Fresh->SetCustomDepthStencilValue(Old->CustomDepthStencilValue);
-	Fresh->SetNotifyRigidBodyCollision(true);
-	Fresh->OnComponentHit.AddDynamic(this, &AFootballMode::NetHit);
-	Fresh->SetVisibility(true);
-	Fresh->SetLinearDamping(1.2f);
-	Fresh->SetPhysicsLinearVelocity(Old->GetPhysicsLinearVelocity());
-	Fresh->SetPhysicsAngularVelocityInRadians(Old->GetPhysicsAngularVelocityInRadians());
-	// Finished attempts keep ground/net physics without deflecting the live ball.
-	Fresh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
 	FinishedBalls.Add(Fresh);
 	// Keep only the most recent attempts. Without a cap every reset after a shot
 	// would leave another simulated actor on the pitch for the rest of the session.

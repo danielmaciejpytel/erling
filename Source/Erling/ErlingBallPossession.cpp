@@ -8,7 +8,7 @@
 
 // Ball possession and dribbling, extracted from AFootballMode. The logic below is
 // moved unchanged; only access to the mode-owned ball/shot state now goes through
-// the owning AFootballMode (Mode->Ball, Mode->ShotInFlight, ...).
+// the owning AFootballMode (Mode->Ball, Mode->Referee->ShotInFlight, ...).
 
 UErlingBallPossession::UErlingBallPossession()
 {
@@ -61,7 +61,7 @@ bool UErlingBallPossession::HasBall(const AFootballPlayer* P) const
 	const AFootballMode* Mode = GetOwner<AFootballMode>();
 	if (!Mode)
 		return false;
-	if (!P || !Mode->Ball || Mode->Scored || Mode->BallHidden || Mode->ShotInFlight)
+	if (!P || !Mode->Ball || Mode->Referee->Scored || Mode->Referee->BallHidden || Mode->Referee->ShotInFlight)
 		return false;
 	const FVector Delta = Mode->Ball->GetComponentLocation() - P->GetActorLocation();
 	return Delta.Size2D() < ErlingPossession::HasBallRadius && Delta.Z < -25 && Delta.Z > -125;
@@ -71,7 +71,7 @@ bool UErlingBallPossession::HasDribbleControl(const AFootballPlayer* P) const
 	const AFootballMode* Mode = GetOwner<AFootballMode>();
 	if (!Mode)
 		return false;
-	if (!P || !Mode->Ball || Mode->Scored || Mode->BallHidden || Mode->ShotInFlight || P->GetCharacterMovement()->IsFalling())
+	if (!P || !Mode->Ball || Mode->Referee->Scored || Mode->Referee->BallHidden || Mode->Referee->ShotInFlight || P->GetCharacterMovement()->IsFalling())
 		return false;
 	const FVector Delta = Mode->Ball->GetComponentLocation() - P->GetActorLocation();
 	float ControlRadius = ErlingPossession::ControlRadius;
@@ -88,7 +88,7 @@ bool UErlingBallPossession::IsRecoverableSprintTouch(const AFootballPlayer* P, f
 	const AFootballMode* Mode = GetOwner<AFootballMode>();
 	if (!Mode)
 		return false;
-	if (!P || !Mode->Ball || Mode->BallHidden || Mode->Scored || Mode->ShotInFlight || SprintReleaseDirection.IsNearlyZero())
+	if (!P || !Mode->Ball || Mode->Referee->BallHidden || Mode->Referee->Scored || Mode->Referee->ShotInFlight || SprintReleaseDirection.IsNearlyZero())
 		return false;
 	const FVector Gap = Mode->Ball->GetComponentLocation() - P->GetActorLocation();
 	const float Now = GetWorld()->GetTimeSeconds();
@@ -109,8 +109,8 @@ void UErlingBallPossession::Dribble(AFootballPlayer* Player, float Dt)
 	AFootballMode* Mode = GetOwner<AFootballMode>();
 	if (!Mode || !Mode->Ball)
 		return;
-	if (!Player || Player->IsMovementLocked() || Mode->Scored || Mode->BallHidden ||
-	    GetWorld()->GetTimeSeconds() - Mode->LastShot < ErlingPossession::PostShotLockout || Player->GetCharacterMovement()->IsFalling())
+	if (!Player || Player->IsMovementLocked() || Mode->Referee->Scored || Mode->Referee->BallHidden ||
+	    GetWorld()->GetTimeSeconds() - Mode->Referee->LastShot < ErlingPossession::PostShotLockout || Player->GetCharacterMovement()->IsFalling())
 		return;
 	const float Now = GetWorld()->GetTimeSeconds();
 	FVector Pos = Mode->Ball->GetComponentLocation();
@@ -318,7 +318,7 @@ void UErlingBallPossession::Dribble(AFootballPlayer* Player, float Dt)
 		DribbleMinFootClearance = FMath::Min(DribbleMinFootClearance, FMath::Min(FVector::Dist2D(Pos, Left), FVector::Dist2D(Pos, Right)));
 	}
 
-	Mode->ShotInFlight = false;
+	Mode->Referee->ShotInFlight = false;
 	auto KeepTargetOutsideFeet = [&](FVector Target, float Radius)
 	{
 		if (!HasFeet)

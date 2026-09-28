@@ -413,7 +413,7 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
             const float Now=P->GetWorld()->GetTimeSeconds();
             // Releasing sprint does not cancel the physical recovery of its last touch.
             const bool RecoverWhileSteering=!Mode->Possession->PossessionActive&&!RawInputDirection.IsNearlyZero();
-            const bool SprintReleaseChase=SprintController&&(SprintController->Sprint||RecoverWhileSteering)&&!Mode->Possession->BallStopRequested&&!Mode->Possession->BallStopped&&!Mode->ShotInFlight&&!Mode->Possession->SprintKickPending&&Now>=Mode->Possession->SprintContactUntil&&Mode->IsRecoverableSprintTouch(P);
+            const bool SprintReleaseChase=SprintController&&(SprintController->Sprint||RecoverWhileSteering)&&!Mode->Possession->BallStopRequested&&!Mode->Possession->BallStopped&&!Mode->Referee->ShotInFlight&&!Mode->Possession->SprintKickPending&&Now>=Mode->Possession->SprintContactUntil&&Mode->IsRecoverableSprintTouch(P);
             if(SprintReleaseChase)
             {
                 FVector Gap=Mode->Ball->GetComponentLocation()-CharacterOwner->GetActorLocation();

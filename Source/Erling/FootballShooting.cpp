@@ -49,7 +49,7 @@ void AFootballController::StartCharge()
 	if (Screen != EScreen::Game || !Avatar || !Avatar->CanAct() || GetWorld()->GetTimeSeconds() < KickCooldown)
 		return;
 	auto* M = GetWorld()->GetAuthGameMode<AFootballMode>();
-	if (!M || !M->Ball || M->BallHidden || M->Scored || M->ShotInFlight)
+	if (!M || !M->Ball || M->Referee->BallHidden || M->Referee->Scored || M->Referee->ShotInFlight)
 		return;
 	const float Now = GetWorld()->GetTimeSeconds();
 	const bool RecoverableSprintTouch = Sprint && M->IsRecoverableSprintTouch(Avatar);

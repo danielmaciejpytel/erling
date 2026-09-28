@@ -7,6 +7,7 @@
 #include "ErlingBallPossession.h"
 #include "ErlingCameraRig.h"
 #include "ErlingAudioVideo.h"
+#include "ErlingReferee.h"
 #include "ErlingShot.h"
 #include "Football.generated.h"
 
@@ -59,13 +60,15 @@ UCLASS() class ERLING_API AFootballMode : public AGameModeBase {
  GENERATED_BODY()
 public:
  AFootballMode(); virtual void BeginPlay() override; virtual void Tick(float Dt) override;
+ /** Live ball mesh, owned by BallActor (see ErlingBall.h). */
  UPROPERTY() UStaticMeshComponent* Ball=nullptr;
+ UPROPERTY() TObjectPtr<class AErlingBall> BallActor;
  UPROPERTY() class USoundBase* GoalSound=nullptr;
- bool ShotInFlight=false,BallHidden=false;
- UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
- void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
- int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
- UFUNCTION(BlueprintPure, Category="Football|Validation") int32 GetGoalCountForValidation() const { return Goals; }
+ void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
+ void HideMiss(){Referee->HideMiss();} static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
+ /** Shot state, goals, misses and the score (see ErlingReferee.h). */
+ UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingReferee> Referee;
+ UFUNCTION(BlueprintPure, Category="Football|Validation") int32 GetGoalCountForValidation() const { return Referee->Goals; }
  /** Possession / dribbling state and logic (see ErlingBallPossession.h). */
  UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingBallPossession> Possession;
  void Dribble(AFootballPlayer* Player,float Dt){Possession->Dribble(Player,Dt);}
@@ -77,7 +80,6 @@ public:
  bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=ErlingPossession::RecoveryAbandonDistance)const{return Possession->IsRecoverableSprintTouch(Player,MaxGap);}
  void ClearSprintReleaseRecovery(){Possession->ClearSprintReleaseRecovery();}
  bool LaunchShot(AFootballPlayer* Player,const FVector& Velocity,bool CommittedShot=false);
- TWeakObjectPtr<AFootballPlayer> LastShooter;
  UStaticMeshComponent* Box(const FVector& P,const FVector& Size,const FLinearColor& Color,bool Collision=true);
 };
 UCLASS() class ERLING_API AFootballController : public APlayerController {
