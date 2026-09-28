@@ -44,6 +44,37 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+namespace
+{
+// Order matches the FaceExpression index used by M_Face.
+struct FFaceMotion { float Duration, First, Interval; bool bSigned; };
+struct FFaceStyle { const TCHAR* Name; FFaceMotion Blink, Gaze, Mouth, Accent; };
+constexpr FFaceMotion Off{0.f, 0.f, 0.f, false};
+const FFaceStyle FaceStyles[] = {
+	// Scowl: short blinks, a sideways glare, the tongue drops a little, the brows pinch down.
+	{TEXT("angry"),   {.30f, 2.2f, 4.4f, false}, {.70f, 3.4f, 6.6f, true}, {.50f, 5.6f, 7.9f, false}, {.55f, 1.2f, 5.3f, false}},
+	// Closed smiling eyes: cheeks lift them; the tongue bobs with the laugh.
+	{TEXT("happy"),   Off, Off, {.55f, 2.4f, 5.2f, false}, {.70f, 1.1f, 4.1f, false}},
+	// Star eyes: a small shrink pulse and a twinkle that turns each way in turn.
+	{TEXT("joy"),     {.34f, 1.6f, 3.7f, false}, Off, {.50f, 3.0f, 5.6f, false}, {.80f, .9f, 3.3f, true}},
+	// Approved shocked timings; the mouth stays still.
+	{TEXT("shocked"), {.36f, 2.7f, 3.8f, false}, {.64f, 4.2f, 8.0f, true}, Off, {.60f, 8.5f, 8.7f, false}},
+	// Asleep: slow breathing of the closed eyes and a lazily swinging drop of drool.
+	{TEXT("sleepy"),  Off, Off, {1.8f, 1.5f, 4.6f, true}, {2.0f, 3.2f, 6.3f, false}},
+	// Heavy, slow blinks, a drifting look and a hanging tongue that sways.
+	{TEXT("tired"),   {.95f, 2.0f, 5.2f, false}, {1.3f, 4.0f, 8.4f, true}, {1.6f, 1.2f, 5.9f, true}, Off},
+};
+constexpr float FaceBlendTime = .2f;
+int32 FaceIndex(const FString& TexturePath)
+{
+	FString Name = FPaths::GetBaseFilename(TexturePath);
+	Name.RemoveFromStart(TEXT("T_"));
+	for (int32 I = 0; I < UE_ARRAY_COUNT(FaceStyles); ++I)
+		if (Name.Equals(FaceStyles[I].Name, ESearchCase::IgnoreCase))
+			return I;
+	return INDEX_NONE;
+}
+}
 AFootballPlayer::AFootballPlayer(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer.SetDefaultSubobjectClass<UErlingMovement>(ACharacter::CharacterMovementComponentName))
 {
@@ -134,7 +165,126 @@ void AFootballPlayer::SetAnimation(const FString& Name, bool Loop)
 void AFootballPlayer::Tick(float Dt)
 {
 	Super::Tick(Dt);
+	UpdateFaceMaterial(Dt);
 	UpdateAction(Dt);
+}
+void AFootballPlayer::SetFaceExpression(const FString& TexturePath)
+{
+	const int32 Expression = FaceIndex(TexturePath);
+	if (Expression == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Unknown face expression %s"), *TexturePath);
+		return;
+	}
+	if (!FaceMaterial || Expression == NextFace)
+	{
+		QueuedFace = INDEX_NONE;
+		return;
+	}
+	if (CurrentFace == INDEX_NONE)
+	{
+		CurrentFace = NextFace = Expression;
+		FaceMaterial->SetScalarParameterValue(TEXT("FaceExpression"), Expression);
+		FaceMaterial->SetScalarParameterValue(TEXT("NextFaceExpression"), Expression);
+		FaceMaterial->SetScalarParameterValue(TEXT("FaceBlend"), 0.f);
+		ScheduleFaceMotion(Expression);
+		return;
+	}
+	if (CurrentFace != NextFace)
+	{
+		QueuedFace = Expression;
+		return;
+	}
+	NextFace = Expression;
+	FaceBlendElapsed = 0.f;
+	FaceMaterial->SetScalarParameterValue(TEXT("NextFaceExpression"), Expression);
+	FaceMaterial->SetScalarParameterValue(TEXT("FaceBlend"), 0.f);
+	ScheduleFaceMotion(Expression);
+}
+void AFootballPlayer::ScheduleFaceMotion(int32 Expression)
+{
+	const FFaceStyle& Style = FaceStyles[Expression];
+	NextBlinkAt = FaceMotionElapsed + Style.Blink.First;
+	NextGazeAt = FaceMotionElapsed + Style.Gaze.First;
+	NextMouthAt = FaceMotionElapsed + Style.Mouth.First;
+	NextAccentAt = FaceMotionElapsed + Style.Accent.First;
+}
+void AFootballPlayer::UpdateFaceMaterial(float Dt)
+{
+	if (!FaceMaterial || NextFace == INDEX_NONE)
+		return;
+	if (CurrentFace != NextFace)
+	{
+		FaceBlendElapsed = FMath::Min(FaceBlendElapsed + Dt, FaceBlendTime);
+		FaceMaterial->SetScalarParameterValue(TEXT("FaceBlend"), FaceBlendElapsed / FaceBlendTime);
+		if (FaceBlendElapsed >= FaceBlendTime)
+		{
+			CurrentFace = NextFace;
+			FaceMaterial->SetScalarParameterValue(TEXT("FaceExpression"), CurrentFace);
+			FaceMaterial->SetScalarParameterValue(TEXT("FaceBlend"), 0.f);
+			FaceBlendElapsed = 0.f;
+			const int32 Queued = QueuedFace;
+			QueuedFace = INDEX_NONE;
+			if (Queued != INDEX_NONE && Queued != CurrentFace)
+				SetFaceExpression(FaceStyles[Queued].Name);
+		}
+	}
+	// One clip plays at a time; a clip a face does not use is never started.
+	const FFaceStyle& Style = FaceStyles[NextFace];
+	FaceMotionElapsed += Dt;
+	if (FaceClip == EFaceClip::Idle)
+	{
+		if (Style.Blink.Duration > 0.f && FaceMotionElapsed >= NextBlinkAt)
+		{
+			FaceClip = EFaceClip::Blink;
+			NextBlinkAt = FaceMotionElapsed + Style.Blink.Interval;
+		}
+		else if (Style.Gaze.Duration > 0.f && FaceMotionElapsed >= NextGazeAt)
+		{
+			FaceClip = EFaceClip::Gaze;
+			NextGazeAt = FaceMotionElapsed + Style.Gaze.Interval;
+			GazeDirection = -GazeDirection;
+		}
+		else if (Style.Mouth.Duration > 0.f && FaceMotionElapsed >= NextMouthAt)
+		{
+			FaceClip = EFaceClip::Mouth;
+			NextMouthAt = FaceMotionElapsed + Style.Mouth.Interval;
+			MouthDirection = Style.Mouth.bSigned ? -MouthDirection : 1;
+		}
+		else if (Style.Accent.Duration > 0.f && FaceMotionElapsed >= NextAccentAt)
+		{
+			FaceClip = EFaceClip::Accent;
+			NextAccentAt = FaceMotionElapsed + Style.Accent.Interval;
+			AccentDirection = Style.Accent.bSigned ? -AccentDirection : 1;
+		}
+		FaceClipElapsed = 0.f;
+	}
+	float Blink = 0.f, Gaze = 0.f, Mouth = 0.f, Accent = 0.f;
+	if (FaceClip != EFaceClip::Idle)
+	{
+		const FFaceMotion& Motion = FaceClip == EFaceClip::Blink ? Style.Blink :
+			FaceClip == EFaceClip::Gaze ? Style.Gaze :
+			FaceClip == EFaceClip::Mouth ? Style.Mouth : Style.Accent;
+		// A clip the new face does not use still finishes over the default length.
+		const float Duration = Motion.Duration > 0.f ? Motion.Duration : .5f;
+		FaceClipElapsed += Dt;
+		const float Phase = FMath::Clamp(FaceClipElapsed / Duration, 0.f, 1.f);
+		const float Envelope = FMath::Square(FMath::Sin(PI * Phase));
+		switch (FaceClip)
+		{
+		case EFaceClip::Blink: Blink = Envelope; break;
+		case EFaceClip::Gaze: Gaze = GazeDirection * Envelope; break;
+		case EFaceClip::Mouth: Mouth = MouthDirection * Envelope; break;
+		case EFaceClip::Accent: Accent = AccentDirection * Envelope; break;
+		default: break;
+		}
+		if (Phase >= 1.f)
+		{
+			FaceClip = EFaceClip::Idle;
+			FaceClipElapsed = 0.f;
+		}
+	}
+	FaceMaterial->SetVectorParameterValue(TEXT("FaceMorph"), FLinearColor(Blink, Gaze, Mouth, Accent));
 }
 void AFootballPlayer::ApplyKit(const TArray<int32>& Values, const TArray<FKitCategory>& Cats)
 {
@@ -150,7 +300,7 @@ void AFootballPlayer::ApplyKit(const TArray<int32>& Values, const TArray<FKitCat
 		if (C == 1)
 		{
 			if (FaceMaterial && !O.Texture.IsEmpty())
-				FaceMaterial->SetTextureParameterValue(TEXT("FaceTexture"), LoadObject<UTexture2D>(nullptr, *O.Texture));
+				SetFaceExpression(O.Texture);
 			continue;
 		}
 		for (const auto& Path : O.Meshes)
