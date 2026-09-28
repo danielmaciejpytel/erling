@@ -6,6 +6,7 @@
 #include "GameFramework/SaveGame.h"
 #include "ErlingBallPossession.h"
 #include "ErlingCameraRig.h"
+#include "ErlingAudioVideo.h"
 #include "ErlingShot.h"
 #include "Football.generated.h"
 
@@ -89,10 +90,12 @@ public:
  UPROPERTY() AFootballPlayer* Avatar=nullptr;
  UPROPERTY() ACameraActor* ViewCamera=nullptr;
  UPROPERTY() UFootballSave* Saved=nullptr;
- UPROPERTY() UAudioComponent* Music=nullptr;
- UPROPERTY() TMap<FString,class USoundBase*> Effects;
- UPROPERTY() TArray<UAudioComponent*> ActiveEffects;
- void PlayEffect(const FString& Name,float Gain=1.f); void UpdateEffectsVolume(float V);
+ /** Music, sound effects and graphics quality (see ErlingAudioVideo.h). */
+ UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingAudioVideo> AudioVideo;
+ void PlayEffect(const FString& Name,float Gain=1.f){AudioVideo->PlayEffect(Name,Gain);}
+ void UpdateEffectsVolume(float V){AudioVideo->UpdateEffectsVolume(V);}
+ void UpdateMusicVolume(float V){AudioVideo->UpdateMusicVolume(V);}
+ void ApplyQuality(){AudioVideo->ApplyQuality();}
  float EditorZoom=0; bool Dragging=false,MouseWasDown=false; float LastMouseX=0;
  bool Charging=false,ShotChargeArmed=false,ShotBufferActive=false;
  // Buffer power stays in the ballistic curve's 0..1.5 range, independent of button hold duration.
@@ -103,7 +106,7 @@ public:
  FErlingShotEvaluation EvaluateShot(float PowerSeconds,FVector AimOverride=FVector::ZeroVector)const;
  int DemoDirection=1,DemoPhase=0,DemoShotDistanceIndex=-1; float DemoShotAt=0,DemoShotTargetX=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
- void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
+ void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt);
  void SlidePressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
  bool SpaceHeld=false,GoalSpacePending=false,GoalCelebrationUsed=true,PendingShot=false,PendingTrip=false;
 	bool GoalHoldRequested=false; float MoveForward=0,MoveRight=0;
