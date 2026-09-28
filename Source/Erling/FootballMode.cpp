@@ -87,27 +87,10 @@ void AFootballMode::BeginPlay()
 	Ball->BodyInstance.bUseCCD = true;
 	Ball->SetNotifyRigidBodyCollision(true);
 	Ball->OnComponentHit.AddDynamic(this, &AFootballMode::NetHit);
-	if (!GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
-	{
-		auto Dome = GetWorld()->SpawnActor<AStaticMeshActor>();
-		Dome->SetActorEnableCollision(false);
-		auto DC = Dome->GetStaticMeshComponent();
-		DC->SetMobility(EComponentMobility::Movable);
-		DC->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
-		DC->SetWorldScale3D(FVector(400));
-		DC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		DC->SetCastShadow(false);
-		DC->SetMaterial(0, LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_Sky.M_Sky")));
-	}
-	if (auto M = LoadObject<UMaterialInterface>(nullptr, GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection"))
-	                                                         ? TEXT("/Game/Erling/ArtDirection/M_Ball.M_Ball")
-	                                                         : TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))
+	if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/ArtDirection/M_Ball.M_Ball")))
 		Ball->SetMaterial(0, M);
-	if (GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
-	{
-		Ball->SetRenderCustomDepth(true);
-		Ball->SetCustomDepthStencilValue(1);
-	}
+	Ball->SetRenderCustomDepth(true);
+	Ball->SetCustomDepthStencilValue(1);
 	auto PM = NewObject<UPhysicalMaterial>(this);
 	PM->Restitution = ErlingBall::Restitution;
 	PM->Friction = ErlingBall::Friction;

@@ -23,32 +23,28 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 	// Flip/root motion can move the stylized modular pieces far outside their rest bounds.
 	// A generous dynamic bound prevents one-frame component culling during the airborne flip.
 	Piece->SetBoundsScale(4.f);
-	// The comparison map owns its materials; the original Pitch keeps its look.
-	if (GetWorld()->GetMapName().Contains(TEXT("Pitch_ArtDirection")))
+	Piece->SetRenderCustomDepth(true);
+	// Separate part masks keep garment seams visible without shading smooth skin.
+	// 1: face/ball/accessories, 2: hair, 3: body, 4: shirt, 5: pants, 6: shoes.
+	const FString PieceName = Piece->GetSkeletalMeshAsset() ? Piece->GetSkeletalMeshAsset()->GetName() : FString();
+	const bool bStrandInk = bIsHair && PieceName != TEXT("SK_rubber");
+	int32 InkMask = bStrandInk ? 2 : 1;
+	if (PieceName == TEXT("SK_body"))
+		InkMask = 3;
+	else if (PieceName == TEXT("SK_shirt"))
+		InkMask = 4;
+	else if (PieceName == TEXT("SK_pants"))
+		InkMask = 5;
+	else if (PieceName == TEXT("SK_shoe"))
+		InkMask = 6;
+	Piece->SetCustomDepthStencilValue(InkMask);
+	for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
 	{
-		Piece->SetRenderCustomDepth(true);
-		// Separate part masks keep garment seams visible without shading smooth skin.
-		// 1: face/ball/accessories, 2: hair, 3: body, 4: shirt, 5: pants, 6: shoes.
-		const FString PieceName = Piece->GetSkeletalMeshAsset() ? Piece->GetSkeletalMeshAsset()->GetName() : FString();
-		const bool bStrandInk = bIsHair && PieceName != TEXT("SK_rubber");
-		int32 InkMask = bStrandInk ? 2 : 1;
-		if (PieceName == TEXT("SK_body"))
-			InkMask = 3;
-		else if (PieceName == TEXT("SK_shirt"))
-			InkMask = 4;
-		else if (PieceName == TEXT("SK_pants"))
-			InkMask = 5;
-		else if (PieceName == TEXT("SK_shoe"))
-			InkMask = 6;
-		Piece->SetCustomDepthStencilValue(InkMask);
-		for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
+		if (auto* Original = Piece->GetMaterial(Index))
 		{
-			if (auto* Original = Piece->GetMaterial(Index))
-			{
-				const FString Path = FString::Printf(TEXT("/Game/Erling/ArtDirection/%s.%s"), *Original->GetName(), *Original->GetName());
-				if (auto* Styled = LoadObject<UMaterialInterface>(nullptr, *Path))
-					Piece->SetMaterial(Index, Styled);
-			}
+			const FString Path = FString::Printf(TEXT("/Game/Erling/ArtDirection/%s.%s"), *Original->GetName(), *Original->GetName());
+			if (auto* Styled = LoadObject<UMaterialInterface>(nullptr, *Path))
+				Piece->SetMaterial(Index, Styled);
 		}
 	}
 	if (bIsHair)
