@@ -44,16 +44,6 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-static bool HasStylizedGoalAtEnd(const UObject* WorldContext, int32 Sign)
-{
-	TArray<AActor*> Goals;
-	UGameplayStatics::GetAllActorsOfClass(WorldContext, AErlingStylizedGoal::StaticClass(), Goals);
-	for (const AActor* Goal : Goals)
-		if (Goal && FMath::Abs(Goal->GetActorLocation().X - Sign * ErlingPitch::GoalLineX) < 100.f)
-			return true;
-	return false;
-}
-
 AFootballMode::AFootballMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -78,72 +68,9 @@ UStaticMeshComponent* AFootballMode::Box(const FVector& P, const FVector& Size, 
 	}
 	return C;
 }
-void AFootballMode::CreateField()
-{
-	TArray<AActor*> Existing;
-	UGameplayStatics::GetAllActorsWithTag(this, TEXT("PitchBuilt"), Existing);
-	if (!Existing.IsEmpty())
-		return;
-	Box(FVector(0, 0, -35), FVector(6800, 4800, 70), FLinearColor(.025f, .1f, .07f));
-	for (int32 I = 0; I < 12; I++)
-		Box(FVector(-2475 + I * 450, 0, -2), FVector(450, 3600, 5),
-		    I % 2 ? FLinearColor(.055f, .25f, .125f) : FLinearColor(.04f, .21f, .10f), false);
-	auto Line = [this](FVector P, FVector S)
-	{
-		Box(P, S, FLinearColor(.83f, .91f, .85f), false);
-	};
-	for (int S : {-1, 1})
-	{
-		Line(FVector(0, S * ErlingPitch::TouchlineY, 2), FVector(5400, 8, 3));
-		Line(FVector(S * 2700, 0, 2), FVector(8, 3500, 3));
-	}
-	Line(FVector(0, 0, 2), FVector(8, 3500, 3));
-	for (int I = 0; I < 64; I++)
-	{
-		float A = I * 2 * PI / 64;
-		auto C = Box(FVector(500 * FMath::Cos(A), 500 * FMath::Sin(A), 2), FVector(50, 8, 3), FLinearColor(.83f, .91f, .85f), false);
-		C->SetWorldRotation(FRotator(0, FMath::RadiansToDegrees(A) + 90, 0));
-	}
-	for (int S : {-1, 1})
-	{
-		const bool HasStylizedGoal = HasStylizedGoalAtEnd(this, S);
-		for (int Y : {-1, 1})
-		{
-			Line(FVector(S * 2400, Y * 650, 2), FVector(600, 8, 3));
-			if (!HasStylizedGoal)
-				Box(FVector(S * ErlingPitch::GoalLineX, Y * ErlingPitch::GoalPostY, ErlingPitch::CrossbarZ * .5f),
-				    FVector(18, 18, ErlingPitch::CrossbarZ), FLinearColor(.9f, .95f, 1));
-		}
-		Line(FVector(S * 2100, 0, 2), FVector(8, 1300, 3));
-		if (!HasStylizedGoal)
-		{
-			Box(FVector(S * ErlingPitch::GoalLineX, 0, ErlingPitch::CrossbarZ), FVector(18, ErlingPitch::GoalPostY * 2 + 20, 18),
-			    FLinearColor(.9f, .95f, 1));
-			for (int Y = -350; Y <= 350; Y += 50)
-				Box(FVector(S * ErlingPitch::NetBackX, Y, ErlingPitch::CrossbarZ * .5f), FVector(5, 3, ErlingPitch::CrossbarZ),
-				    FLinearColor(.48f, .58f, .62f), false);
-			for (int Z = 20; Z <= 260; Z += 40)
-				Box(FVector(S * ErlingPitch::NetBackX, 0, Z), FVector(5, ErlingPitch::GoalPostY * 2, 3), FLinearColor(.48f, .58f, .62f), false);
-		}
-	}
-	// Simple stands leave the gameplay area clear.
-	for (int S : {-1, 1})
-		for (int Row = 0; Row < 3; Row++)
-			Box(FVector(0, S * (2050 + Row * 130), Row * 80 + 25), FVector(5400, 110, 50 + Row * 100), FLinearColor(.05f, .10f, .16f));
-	auto Sun = GetWorld()->SpawnActor<ADirectionalLight>(FVector(0, 0, 1000), FRotator(-55, -30, 0));
-	Sun->GetLightComponent()->SetIntensity(3.2f);
-	Cast<UDirectionalLightComponent>(Sun->GetLightComponent())->bAtmosphereSunLight = true;
-	auto Sky = GetWorld()->SpawnActor<ASkyLight>();
-	Sky->GetLightComponent()->SetIntensity(.8f);
-	Sky->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-	Sky->GetLightComponent()->bRealTimeCapture = true;
-	GetWorld()->SpawnActor<ASkyAtmosphere>();
-}
 void AFootballMode::BeginPlay()
 {
 	Super::BeginPlay();
-	CreateField();
-	CreateNetCollision();
 	Box(FVector(0, 0, -55), FVector(20000, 20000, 100), FLinearColor(.04f, .18f, .08f));
 	GoalSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/Erling/Audio/goal.goal"));
 	auto A = GetWorld()->SpawnActor<AStaticMeshActor>(FVector(0, 0, 40), FRotator::ZeroRotator);
@@ -296,34 +223,6 @@ void AFootballMode::Tick(float Dt)
 		HideMiss();
 	if (P.Z < -200)
 		ResetBall();
-}
-void AFootballMode::CreateNetCollision()
-{
-	auto Net = [this](FVector P, FVector Size)
-	{
-		auto C = Box(P, Size, FLinearColor::White);
-		C->SetVisibility(false);
-		C->SetCastShadow(false);
-		C->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		C->ComponentTags.Add(TEXT("GoalNet"));
-		auto PM = NewObject<UPhysicalMaterial>(C);
-		PM->Restitution = 0;
-		PM->bOverrideRestitutionCombineMode = true;
-		PM->RestitutionCombineMode = EFrictionCombineMode::Min;
-		PM->Friction = .9f;
-		C->SetPhysMaterialOverride(PM);
-	};
-	for (int S : {-1, 1})
-	{
-		if (HasStylizedGoalAtEnd(this, S))
-			continue;
-		Net(FVector(S * ErlingPitch::NetBackX, 0, ErlingPitch::CrossbarZ * .5f),
-		    FVector(12, ErlingPitch::GoalPostY * 2, ErlingPitch::CrossbarZ));
-		for (int Y : {-1, 1})
-			Net(FVector(S * ErlingPitch::NetCenterX, Y * ErlingPitch::GoalPostY, ErlingPitch::CrossbarZ * .5f),
-			    FVector(250, 12, ErlingPitch::CrossbarZ));
-		Net(FVector(S * ErlingPitch::NetCenterX, 0, ErlingPitch::CrossbarZ), FVector(250, ErlingPitch::GoalPostY * 2, 12));
-	}
 }
 void AFootballMode::NetHit(
     UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
