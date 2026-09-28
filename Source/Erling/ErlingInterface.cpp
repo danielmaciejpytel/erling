@@ -11,6 +11,8 @@
 #include "Components/ProgressBar.h"
 #include "Components/Image.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
+#include "Rendering/SlateRenderer.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Engine/Texture2D.h"
@@ -209,44 +211,30 @@ void UErlingInterface::BuildControllerHints()
 
     KeyboardHintWidgets.Reset();
     const int32 Language=Controller&&Controller->Saved?Controller->Saved->Language:0;
-    TSet<UWidget*> KeyboardWidgets;
     for(UWidget* Child:Hints->GetAllChildren())
     {
         KeyboardHintWidgets.Add(Child);
-        KeyboardWidgets.Add(Child);
     }
 
-    // Some saved widget versions kept the mouse-button prompt in a sibling
-    // canvas instead of under ControlHints. Capture that complete prompt group
-    // too, so it cannot remain visible alongside the Xbox row.
-    TArray<UWidget*> AllWidgets;
-    if(WidgetTree) WidgetTree->GetAllWidgets(AllWidgets);
-    for(UWidget* Widget:AllWidgets)
-        if(UImage* Image=Cast<UImage>(Widget))
-            if(const UObject* Resource=Image->GetBrush().GetResourceObject();Resource&&Resource->GetName()==TEXT("T_UI_Mouse_Outline"))
-                if(UPanelWidget* Parent=Image->GetParent())
-                    for(UWidget* Sibling:Parent->GetAllChildren())
-                        if(Sibling&&!KeyboardWidgets.Contains(Sibling))
-                        {
-                            KeyboardWidgets.Add(Sibling);
-                            KeyboardHintWidgets.Add(Sibling);
-                        }
+    // The saved KBM mouse keycap and label are siblings of ControlHints.
+    for(const FName Name:{FName(TEXT("Element_021_1")),FName(TEXT("Element_022_1"))})
+        if(UWidget* Widget=GetWidgetFromName(Name);Widget&&Widget->GetParent()==Hints->GetParent())
+            KeyboardHintWidgets.Add(Widget);
 
-    UTextBlock* StyleText=nullptr;
-    for(UWidget* Child:KeyboardHintWidgets)
-        if((StyleText=Cast<UTextBlock>(Child))) break;
+    // Copy the action label style, not the larger text printed on a keycap.
+    UTextBlock* StyleText=Cast<UTextBlock>(GetWidgetFromName(TEXT("Element_009_0")));
     const FSlateFontInfo HintFont=StyleText?StyleText->GetFont():FSlateFontInfo();
     const FSlateColor HintColor=StyleText?StyleText->GetColorAndOpacity():FSlateColor(FLinearColor::White);
 
-    struct FControllerHint { const TCHAR* File; const TCHAR* En; const TCHAR* Pl; float X; float LabelWidth; };
+    struct FControllerHint { const TCHAR* File; const TCHAR* En; const TCHAR* Pl; };
     const FControllerHint HintsToBuild[]={
-        {TEXT("analog.png"),TEXT("move"),TEXT("ruch"),18,140},
-        {TEXT("lt.png"),TEXT("control"),TEXT("kontrola"),270,135},
-        {TEXT("rt.png"),TEXT("sprint"),TEXT("sprint"),526,120},
-        {TEXT("a.png"),TEXT("jump"),TEXT("skok"),770,105},
-        {TEXT("x.png"),TEXT("shoot / pass"),TEXT("strzał / podanie"),996,240},
-        {TEXT("b.png"),TEXT("slide"),TEXT("wślizg"),1345,115},
-        {TEXT("menu.png"),TEXT("menu"),TEXT("menu"),1570,112}
+        {TEXT("analog.png"),TEXT("move"),TEXT("ruch")},
+        {TEXT("lt.png"),TEXT("control"),TEXT("kontrola")},
+        {TEXT("rt.png"),TEXT("sprint"),TEXT("sprint")},
+        {TEXT("a.png"),TEXT("jump"),TEXT("skok")},
+        {TEXT("x.png"),TEXT("shoot / pass"),TEXT("strzał / podanie")},
+        {TEXT("b.png"),TEXT("slide"),TEXT("wślizg")},
+        {TEXT("menu.png"),TEXT("menu"),TEXT("menu")}
     };
     const FString IconDirectory=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/XboxController");
     IImageWrapperModule& ImageModule=FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
@@ -271,8 +259,8 @@ void UErlingInterface::BuildControllerHints()
         Icon->SetVisibility(ESlateVisibility::HitTestInvisible);
         if(UCanvasPanelSlot* CanvasSlot=Hints->AddChildToCanvas(Icon))
         {
-            CanvasSlot->SetPosition(FVector2D(Hint.X,-5));
-            CanvasSlot->SetSize(FVector2D(64,64));
+            CanvasSlot->SetPosition(FVector2D(0,1));
+            CanvasSlot->SetSize(FVector2D(48,48));
         }
         ControllerHintWidgets.Add(Icon);
 
@@ -284,10 +272,8 @@ void UErlingInterface::BuildControllerHints()
         ControllerHintLabels.Add(Label);
         if(UCanvasPanelSlot* CanvasSlot=Hints->AddChildToCanvas(Label))
         {
-            // The face's visible capital height sits below the center of its slot.
-            // Lift the label so it centers optically in the HUD strip.
-            CanvasSlot->SetPosition(FVector2D(Hint.X+80,-1));
-            CanvasSlot->SetSize(FVector2D(Hint.LabelWidth,38));
+            CanvasSlot->SetPosition(FVector2D(0,3.900901f));
+            CanvasSlot->SetSize(FVector2D(240,43.099098f));
         }
         ControllerHintWidgets.Add(Label);
     }
@@ -304,8 +290,33 @@ void UErlingInterface::UpdateControllerHints()
         LastControllerHintLanguage=Language;
         const TCHAR* English[]={TEXT("move"),TEXT("control"),TEXT("sprint"),TEXT("jump"),TEXT("shoot / pass"),TEXT("slide"),TEXT("menu")};
         const TCHAR* Polish[]={TEXT("ruch"),TEXT("kontrola"),TEXT("sprint"),TEXT("skok"),TEXT("strzał / podanie"),TEXT("wślizg"),TEXT("menu")};
+        const auto FontMeasure=FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+        constexpr float IconSize=48.f, IconTextGap=10.f;
+        TArray<float> Widths;
+        float ContentWidth=0.f;
         for(int32 Index=0;Index<ControllerHintLabels.Num();++Index)
-            if(ControllerHintLabels[Index]) ControllerHintLabels[Index]->SetText(FText::FromString(Language==1?Polish[Index]:English[Index]));
+        {
+            UTextBlock* Label=ControllerHintLabels[Index];
+            Label->SetText(FText::FromString(Language==1?Polish[Index]:English[Index]).ToUpper());
+            const float Width=FMath::CeilToFloat(FontMeasure->Measure(Label->GetText(),Label->GetFont()).X);
+            Widths.Add(Width);
+            ContentWidth+=IconSize+IconTextGap+Width;
+        }
+        const auto* HintsSlot=Cast<UCanvasPanelSlot>(GetWidgetFromName(TEXT("ControlHints"))->Slot);
+        const float RowWidth=HintsSlot?HintsSlot->GetSize().X:1770.f;
+        const float Gap=FMath::Max(10.f,(RowWidth-ContentWidth)/(Widths.Num()+1));
+        float X=Gap;
+        for(int32 Index=0;Index<Widths.Num();++Index)
+        {
+            if(auto* HintSlot=Cast<UCanvasPanelSlot>(ControllerHintWidgets[Index*2]->Slot))
+                HintSlot->SetPosition(FVector2D(X,1));
+            if(auto* HintSlot=Cast<UCanvasPanelSlot>(ControllerHintLabels[Index]->Slot))
+            {
+                HintSlot->SetPosition(FVector2D(X+IconSize+IconTextGap,3.900901f));
+                HintSlot->SetSize(FVector2D(Widths[Index],43.099098f));
+            }
+            X+=IconSize+IconTextGap+Widths[Index]+Gap;
+        }
     }
     const bool bGamepad=Controller&&Controller->bUsingGamepadInput;
     bLastGamepadHint=bGamepad;

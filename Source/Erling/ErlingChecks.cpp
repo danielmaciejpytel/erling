@@ -24,6 +24,90 @@
 void AFootballController::RunChecks()
 {
     const double Now=GetWorld()->GetTimeSeconds();
+    if(FParse::Param(FCommandLine::Get(),TEXT("BunRubberOnly")))
+    {
+        static int32 Stage=0;
+        static double StageStarted=0.0;
+        static FQuat BunNeutral=FQuat::Identity,RubberNeutral=FQuat::Identity;
+        static float MaxBunMotion=0.f,MaxRubberMotion=0.f;
+        auto CheckMotion=[this](const TCHAR* Label,bool Passed)
+        {
+            const FString Line=FString::Printf(TEXT("%s: %s\n"),Label,Passed?TEXT("PASS"):TEXT("FAIL"));
+            Report+=Line;UE_LOG(LogTemp,Display,TEXT("BUN_RUBBER_CHECK %s"),*Line);
+        };
+        auto Finish=[this]()
+        {
+            FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("bun_rubber_runtime_checks.txt")));
+            FPlatformMisc::RequestExit(false);
+        };
+        USkeletalMeshComponent* Bun=nullptr;
+        USkeletalMeshComponent* Rubber=nullptr;
+        if(Avatar)for(USkeletalMeshComponent* Piece:Avatar->Pieces)
+        {
+            if(!Piece||!Piece->GetSkeletalMeshAsset())continue;
+            if(Piece->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_bun"))Bun=Piece;
+            if(Piece->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_rubber"))Rubber=Piece;
+        }
+        if(!Avatar||!Bun||!Rubber)
+        {
+            CheckMotion(TEXT("bun_and_rubber_meshes_available"),false);Finish();return;
+        }
+        if(Stage==0)
+        {
+            ChangeScreen(EScreen::Game);
+            MoveForward=0;MoveRight=0;Sprint=false;
+            Avatar->ClearAction();Avatar->PhysicalJump=false;
+            Avatar->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+            Avatar->GetCharacterMovement()->StopMovementImmediately();
+            Avatar->SetActorLocation(FVector(-350,0,100));
+            Avatar->SetActorRotation(FRotator::ZeroRotator);
+            Avatar->SetAnimation(TEXT("Run"));
+            Avatar->GetCharacterMovement()->Velocity=FVector(600,0,0);
+            const FTransform Head=Bun->GetSocketTransform(TEXT("head"),RTS_Component);
+            BunNeutral=(Head.GetRotation().Inverse()*Bun->GetSocketTransform(TEXT("bun_swing"),RTS_Component).GetRotation()).GetNormalized();
+            const FTransform BunTransform=Rubber->GetSocketTransform(TEXT("bun_swing"),RTS_Component);
+            RubberNeutral=(BunTransform.GetRotation().Inverse()*Rubber->GetSocketTransform(TEXT("rubber_swing"),RTS_Component).GetRotation()).GetNormalized();
+            CheckMotion(TEXT("bun_swing_bone_imported"),Bun->GetBoneIndex(TEXT("bun_swing"))!=INDEX_NONE);
+            CheckMotion(TEXT("rubber_swing_bone_imported"),Rubber->GetBoneIndex(TEXT("rubber_swing"))!=INDEX_NONE);
+            StageStarted=Now;Stage=1;return;
+        }
+        if(Stage==1)
+        {
+            Avatar->SetAnimation(TEXT("Run"));
+            Avatar->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+            Avatar->GetCharacterMovement()->Velocity=FVector(600,0,0);
+            const FQuat BunNow=(Bun->GetSocketTransform(TEXT("head"),RTS_Component).GetRotation().Inverse()*
+                Bun->GetSocketTransform(TEXT("bun_swing"),RTS_Component).GetRotation()).GetNormalized();
+            const FQuat BunParent=Rubber->GetSocketTransform(TEXT("bun_swing"),RTS_Component).GetRotation();
+            const FQuat RubberNow=(BunParent.Inverse()*Rubber->GetSocketTransform(TEXT("rubber_swing"),RTS_Component).GetRotation()).GetNormalized();
+            MaxBunMotion=FMath::Max(MaxBunMotion,FMath::RadiansToDegrees(BunNeutral.AngularDistance(BunNow)));
+            MaxRubberMotion=FMath::Max(MaxRubberMotion,FMath::RadiansToDegrees(RubberNeutral.AngularDistance(RubberNow)));
+            if(Now-StageStarted>=1.2)
+            {
+                CheckMotion(TEXT("bun_swings_during_run"),MaxBunMotion>.1f);
+                CheckMotion(TEXT("rubber_swings_during_run"),MaxRubberMotion>.05f);
+                StageStarted=Now;Stage=2;
+            }
+            return;
+        }
+        if(Stage==2)
+        {
+            Avatar->SetAnimation(TEXT("Idle_Breathe"));
+            Avatar->GetCharacterMovement()->Velocity=FVector::ZeroVector;
+            if(Now-StageStarted>=.9)
+            {
+                const FQuat BunNow=(Bun->GetSocketTransform(TEXT("head"),RTS_Component).GetRotation().Inverse()*
+                    Bun->GetSocketTransform(TEXT("bun_swing"),RTS_Component).GetRotation()).GetNormalized();
+                const FQuat BunParent=Rubber->GetSocketTransform(TEXT("bun_swing"),RTS_Component).GetRotation();
+                const FQuat RubberNow=(BunParent.Inverse()*Rubber->GetSocketTransform(TEXT("rubber_swing"),RTS_Component).GetRotation()).GetNormalized();
+                CheckMotion(TEXT("bun_settles_after_run"),FMath::RadiansToDegrees(BunNeutral.AngularDistance(BunNow))<.2f);
+                CheckMotion(TEXT("rubber_settles_after_run"),FMath::RadiansToDegrees(RubberNeutral.AngularDistance(RubberNow))<.2f);
+                UE_LOG(LogTemp,Display,TEXT("BUN_RUBBER_MOTION_PEAKS bun=%.3f rubber=%.3f"),MaxBunMotion,MaxRubberMotion);
+                Finish();
+            }
+            return;
+        }
+    }
     if(FParse::Param(FCommandLine::Get(),TEXT("ShotsOnly")))
     {
         static int32 ShotStage=0;

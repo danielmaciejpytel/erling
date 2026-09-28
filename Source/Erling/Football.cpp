@@ -734,7 +734,10 @@ FErlingShotEvaluation AFootballController::EvaluateShot(float PowerSeconds, FVec
 	// Digital WASD has only eight directions. Treat those directions as shot intent,
 	// not literal 45-degree ballistics: preserve the selected side but compress it
 	// into the mouth of the goal, similar to an assisted football-game shot model.
-	if (!Demo && DigitalShotIntent && FMath::Abs(Shot.Velocity.X) > 1.f)
+	const bool GamepadShotIntent = !Demo && bUsingGamepadInput && CurrentDigital;
+	const bool AssistedShotIntent = DigitalShotIntent || GamepadShotIntent;
+	const float AimAssistStrength = DigitalShotIntent ? 1.f : .35f;
+	if (!Demo && AssistedShotIntent && FMath::Abs(Shot.Velocity.X) > 1.f)
 	{
 		const float GoalX = ErlingPitch::GoalLineFor(Shot.Velocity.X);
 		const FVector GoalDirection = (FVector(GoalX, 0, BallPosition.Z) - BallPosition).GetSafeNormal2D();
@@ -746,7 +749,8 @@ FErlingShotEvaluation AFootballController::EvaluateShot(float PowerSeconds, FVec
 			{
 				const float RawSide = BallPosition.Y + Shot.Velocity.Y * RawFlight;
 				constexpr float AimMargin = 292.f;
-				const float AssistedSide = RawSide * AimMargin / FMath::Sqrt(RawSide * RawSide + AimMargin * AimMargin);
+				const float FullAssistedSide = RawSide * AimMargin / FMath::Sqrt(RawSide * RawSide + AimMargin * AimMargin);
+				const float AssistedSide = FMath::Lerp(RawSide, FullAssistedSide, AimAssistStrength);
 				const FVector AssistedDirection = (FVector(GoalX, AssistedSide, BallPosition.Z) - BallPosition).GetSafeNormal2D();
 				Shot.Velocity = AFootballMode::ShotVelocity(BallPosition, AssistedDirection, PowerSeconds);
 			}
@@ -1007,6 +1011,18 @@ void AFootballController::Tick(float Dt)
 	if (Screen == EScreen::Settings && IsPaused())
 		return;
 	const EScreen ActiveScreen = Screen == EScreen::Settings ? SettingsReturn : Screen;
+	if (!bUsingGamepadInput || ActiveScreen != EScreen::Game || Avatar->IsMovementLocked())
+		SmoothedGamepadMoveInput = FVector::ZeroVector;
+	else
+	{
+		FVector TargetMoveInput = GetMoveIntentWorld().GetClampedToMaxSize(1.f);
+		const float SmoothingSpeed = TargetMoveInput.IsNearlyZero() ? 24.f : 18.f;
+		SmoothedGamepadMoveInput = FMath::VInterpTo(SmoothedGamepadMoveInput, TargetMoveInput, Dt, SmoothingSpeed).GetClampedToMaxSize(1.f);
+		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
+		const FRotator MoveRotation(0, MoveYaw, 0);
+		Avatar->AddMovementInput(MoveRotation.Vector(), SmoothedGamepadMoveInput.X);
+		Avatar->AddMovementInput(FRotationMatrix(MoveRotation).GetUnitAxis(EAxis::Y), SmoothedGamepadMoveInput.Y);
+	}
 	UpdateEditorInput(Dt);
 	if (Avatar->GetActorLocation().Z < -250)
 	{

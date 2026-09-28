@@ -24,12 +24,19 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
     bool BackHair=false;
     bool BodyUnderShorts=false;
     bool Shirt=false;
+    bool BunAccessory=false;
+    bool RubberAccessory=false;
     bool HairInitialized=false;
+    bool BunRubberInitialized=false;
     double HairPhase=0.0;
     float LastHairYaw=0.f;
     FVector LastHairVelocity=FVector::ZeroVector,LastHairLocation=FVector::ZeroVector;
     FVector HairPitchAxis=FVector::RightVector;
     FVector HairTurnAxis=FVector::UpVector;
+    FVector BunRubberPitchAxis=FVector::RightVector;
+    double BunRubberPhase=0.0;
+    FVector LastBunRubberVelocity=FVector::ZeroVector,LastBunRubberLocation=FVector::ZeroVector;
+    float BunSwing=0.f,BunSwingSpeed=0.f,RubberSwing=0.f,RubberSwingSpeed=0.f;
     TArray<float> HairJointSwing,HairJointSpeed;
     TArray<float> HairJointTurn,HairJointTurnSpeed;
     virtual void PreUpdate(UAnimInstance* Instance,float Dt) override
@@ -45,6 +52,10 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
             const auto* Component=Instance->GetOwningComponent();
             BackHair=Component&&Component->GetSkeletalMeshAsset()&&
                 Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_hair_back");
+            BunAccessory=Component&&Component->GetSkeletalMeshAsset()&&
+                Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_bun");
+            RubberAccessory=Component&&Component->GetSkeletalMeshAsset()&&
+                Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_rubber");
             BodyUnderShorts=Component&&Component->GetSkeletalMeshAsset()&&
                 Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_body");
             Shirt=Component&&Component->GetSkeletalMeshAsset()&&
@@ -155,6 +166,50 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
                 }
                 HairPitchAxis=Component->GetComponentTransform().InverseTransformVectorNoScale(P->GetActorRightVector());
                 HairTurnAxis=Component->GetComponentTransform().InverseTransformVectorNoScale(P->GetActorUpVector());
+            }
+            if(BunAccessory||RubberAccessory)
+            {
+                const auto* Settings=GetDefault<UErlingHairSettings>();
+                const float Strength=FMath::Clamp(Settings->HairStrength,0.f,5.f);
+                const float MaxAngle=FMath::Clamp(Settings->HairMaxAngle,0.f,30.f);
+                const float Stiffness=FMath::Clamp(Settings->HairStiffness,1.f,1000.f);
+                const float Damping=FMath::Clamp(Settings->HairDamping,0.f,100.f);
+                const FVector Velocity=P->GetVelocity();
+                const FVector Location=P->GetActorLocation();
+                if(!BunRubberInitialized||Dt>.1f||FVector::DistSquared(Location,LastBunRubberLocation)>FMath::Square(200.f))
+                {
+                    BunSwing=0.f;BunSwingSpeed=0.f;RubberSwing=0.f;RubberSwingSpeed=0.f;
+                    LastBunRubberVelocity=Velocity;LastBunRubberLocation=Location;BunRubberPhase=0.0;
+                    BunRubberInitialized=true;
+                }
+                const FVector Acceleration=P->GetActorTransform().InverseTransformVectorNoScale(
+                    (Velocity-LastBunRubberVelocity)/FMath::Max(Dt,.001f)).GetClampedToMaxSize(2500.f);
+                LastBunRubberVelocity=Velocity;LastBunRubberLocation=Location;
+                const bool Gait=P->CurrentAnimation==TEXT("Run")||P->CurrentAnimation==TEXT("Sprint")||P->CurrentAnimation==TEXT("Walk");
+                const bool Grounded=P->GetCharacterMovement()&&P->GetCharacterMovement()->IsMovingOnGround()&&!P->IsMovementLocked();
+                const float Amount=Gait&&Grounded?FMath::Clamp(Velocity.Size2D()/765.f,0.f,1.f):0.f;
+                if(Amount>0.f&&Current)
+                    BunRubberPhase=FMath::Fmod(BunRubberPhase+2.0*PI*FMath::Clamp(Dt,0.f,.1f)/
+                        FMath::Max(Current->GetPlayLength(),.01f),2.0*PI*1000.0);
+                const float GaitAngle=FMath::Sin(BunRubberPhase*2.0);
+                const float AccelAngle=FMath::Clamp(Acceleration.Z*.0008f,-1.5f,1.5f);
+                const float BunLimit=MaxAngle*.65f;
+                const float RubberLimit=MaxAngle*.4f;
+                const float BunTarget=FMath::Clamp(Amount*Strength*.45f*(2.2f*GaitAngle+AccelAngle),-BunLimit,BunLimit);
+                const float RubberTarget=FMath::Clamp(Amount*Strength*.3f*(.75f*GaitAngle+AccelAngle*.35f+
+                    .55f*FMath::Sin(BunRubberPhase*2.0-.65)),-RubberLimit,RubberLimit);
+                for(float Remaining=FMath::Clamp(Dt,0.f,.1f);Remaining>KINDA_SMALL_NUMBER;)
+                {
+                    const float Step=FMath::Min(Remaining,1.f/120.f);
+                    BunSwingSpeed+=((BunTarget-BunSwing)*Stiffness-BunSwingSpeed*Damping)*Step;
+                    BunSwing+=BunSwingSpeed*Step;
+                    RubberSwingSpeed+=((RubberTarget-RubberSwing)*Stiffness*1.1f-RubberSwingSpeed*Damping*1.1f)*Step;
+                    RubberSwing+=RubberSwingSpeed*Step;
+                    BunSwing=FMath::Clamp(BunSwing,-BunLimit,BunLimit);
+                    RubberSwing=FMath::Clamp(RubberSwing,-RubberLimit,RubberLimit);
+                    Remaining-=Step;
+                }
+                BunRubberPitchAxis=Component->GetComponentTransform().InverseTransformVectorNoScale(P->GetActorRightVector());
             }
         }
     }
@@ -294,6 +349,25 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
                     ParentToComponent.InverseTransformVectorNoScale(HairTurnAxis).GetSafeNormal(),
                     FMath::DegreesToRadians(HairJointTurn[Spring]));
                 Output.Pose[Index].SetRotation((Turn*Pitch*Output.Pose[Index].GetRotation()).GetNormalized());
+            }
+        }
+        if((BunAccessory||RubberAccessory)&&BunRubberInitialized)
+        {
+            const FBoneContainer& Bones=Output.Pose.GetBoneContainer();
+            for(FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
+            {
+                const FName BoneName=Bones.GetReferenceSkeleton().GetBoneName(Bones.MakeMeshPoseIndex(Index).GetInt());
+                float Angle=0.f;
+                if(BoneName==TEXT("bun_swing"))Angle=BunSwing;
+                else if(BoneName==TEXT("rubber_swing"))Angle=RubberSwing;
+                else continue;
+                FTransform ParentToComponent=FTransform::Identity;
+                for(FCompactPoseBoneIndex Parent=Bones.GetParentBoneIndex(Index);
+                    Parent.GetInt()!=INDEX_NONE;Parent=Bones.GetParentBoneIndex(Parent))
+                    ParentToComponent=ParentToComponent*Output.Pose[Parent];
+                const FQuat Swing(ParentToComponent.InverseTransformVectorNoScale(BunRubberPitchAxis).GetSafeNormal(),
+                    FMath::DegreesToRadians(Angle));
+                Output.Pose[Index].SetRotation((Swing*Output.Pose[Index].GetRotation()).GetNormalized());
             }
         }
         Output.Pose.NormalizeRotations();
