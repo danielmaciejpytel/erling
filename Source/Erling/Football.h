@@ -137,6 +137,8 @@ public:
  float PitchShotHoldRemaining=0.f;
  FVector PitchShotHoldTarget=FVector::ZeroVector;
  FVector UpdatePitchShotTarget(float Dt,const FVector& Cam,const FVector& NormalTarget,float Fov);
+ void UpdateAvatarFacing(float Dt,EScreen ActiveScreen,AFootballMode* GameplayMode);
+ void UpdateCamera(float Dt,EScreen ActiveScreen,AFootballMode* GameplayMode,const FVector& P);
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
  FString Localize(const TCHAR* English,const TCHAR* Polish) const;
  FString LocalizeCatalogLabel(const FString& Value) const;
