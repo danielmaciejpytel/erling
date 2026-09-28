@@ -12,7 +12,7 @@ The current prototype focuses on making a small football sandbox feel responsive
 - **Three gameplay cameras** — Smooth, Reduced and a fixed **Pitch** view inspired by football games, with camera-relative movement where appropriate.
 - **Keyboard, mouse and gamepad support** — gameplay and character-editor controls are mapped for both desktop input and Xbox-style controllers.
 - **Modular character creator** — hairstyle, face, shirt, shorts and footwear are assembled from skeletal-mesh pieces and face textures driven by `wardrobe.json`, with saved appearance presets.
-- **Slate UI and HUD** — main menu, character editor, settings, pause screen, credits, goal counter, contextual shot feedback and an in-game control strip share one visual language.
+- **UMG UI and HUD** — main menu, character editor, settings, pause screen, credits, goal counter, contextual shot feedback and an in-game control strip share one visual language in a single widget blueprint, with English and Polish text.
 - **Persistent settings** — appearance, camera mode, sensitivity, audio levels and graphics quality are stored through Unreal's save system.
 
 ## Controls
@@ -35,7 +35,7 @@ The character editor also supports drag-to-rotate, `Q` / `E` rotation and mouse-
 
 - Unreal Engine 5.8
 - C++ gameplay, movement, animation and UI logic
-- Slate-based menus and HUD
+- UMG menus and HUD: a `UErlingInterface` (`UUserWidget`) C++ base class drives `WBP_ErlingInterface`, which the `ErlingUIEditor` commandlet builds from an asset manifest
 - Unreal physics simulation for the ball and goal net
 - Custom `UAnimInstance` proxy for clip sampling and blending
 - Custom `UCharacterMovementComponent` behavior for momentum and action movement
