@@ -5,6 +5,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/SaveGame.h"
 #include "ErlingBallPossession.h"
+#include "ErlingCameraRig.h"
 #include "ErlingShot.h"
 #include "Football.generated.h"
 
@@ -125,20 +126,10 @@ public:
  int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
  UPROPERTY(Transient) TObjectPtr<UErlingInterface> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
- FVector CameraPivot=FVector::ZeroVector; bool CameraPivotInitialized=false; float PitchCameraLeadX=0;
- float UpdatePitchCameraLead(float Dt);
- FVector PitchShotOffset=FVector::ZeroVector;
- FVector PitchViewCenter=FVector::ZeroVector;
- bool PitchViewInitialized=false;
- bool PitchViewReturning=false;
- FVector UpdatePitchViewCenter(float Dt,const FVector& Desired);
- float PitchShotSeen=-100.f,PitchShotStarted=0.f,PitchShotGoalX=0.f;
- bool PitchShotTracking=false;
- float PitchShotHoldRemaining=0.f;
- FVector PitchShotHoldTarget=FVector::ZeroVector;
- FVector UpdatePitchShotTarget(float Dt,const FVector& Cam,const FVector& NormalTarget,float Fov);
+ /** Camera placement and shot tracking (see ErlingCameraRig.h). */
+ UPROPERTY(VisibleAnywhere) TObjectPtr<UErlingCameraRig> CameraRig;
  void UpdateAvatarFacing(float Dt,EScreen ActiveScreen,AFootballMode* GameplayMode);
- void UpdateCamera(float Dt,EScreen ActiveScreen,AFootballMode* GameplayMode,const FVector& P);
+ void UpdateCamera(float Dt,EScreen ActiveScreen,AFootballMode* GameplayMode,const FVector& P){CameraRig->Update(Dt,ActiveScreen==EScreen::Game||ActiveScreen==EScreen::Pause,ActiveScreen==EScreen::Editor,GameplayMode,P);}
  void LoadCatalog(); void BuildUI(); void ChangeScreen(EScreen Next); void Cycle(int32 Category,int32 Direction); void SaveAppearance(); void BackFromEditor(); void PauseToggle(); void Kick(); void Reset(); void Forward(float V); void Right(float V); void LookX(float V); void LookY(float V); void SprintOn(); void SprintOff(); void SaveSettings(); void Quit();
  FString Localize(const TCHAR* English,const TCHAR* Polish) const;
  FString LocalizeCatalogLabel(const FString& Value) const;

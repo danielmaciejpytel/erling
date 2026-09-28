@@ -141,12 +141,12 @@ void AFootballController::ChangeScreen(EScreen Next)
 		Yaw = 0;
 		Pitch = -15;
 		KickCooldown = 0;
-		CameraPivotInitialized = false;
-		PitchCameraLeadX = 0;
-		PitchViewInitialized = false;
-		PitchShotTracking = false;
-		PitchShotHoldRemaining = 0.f;
-		PitchShotOffset = FVector::ZeroVector;
+		CameraRig->CameraPivotInitialized = false;
+		CameraRig->PitchCameraLeadX = 0;
+		CameraRig->PitchViewInitialized = false;
+		CameraRig->PitchShotTracking = false;
+		CameraRig->PitchShotHoldRemaining = 0.f;
+		CameraRig->PitchShotOffset = FVector::ZeroVector;
 		Reset();
 	}
 	if (Next == EScreen::Main && Old != EScreen::Credits && !ResumeFromSettings)

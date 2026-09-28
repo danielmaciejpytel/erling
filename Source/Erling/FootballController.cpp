@@ -50,6 +50,7 @@ AFootballController::AFootballController()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bTickEvenWhenPaused = true;
 	bAutoManageActiveCameraTarget = false;
+	CameraRig = CreateDefaultSubobject<UErlingCameraRig>(TEXT("CameraRig"));
 }
 void AFootballController::BeginPlay()
 {
