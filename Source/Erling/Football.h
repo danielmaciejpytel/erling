@@ -105,7 +105,8 @@ public:
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt); void ApplyQuality(); void UpdateMusicVolume(float V);
  void SlidePressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
  bool SpaceHeld=false,GoalSpacePending=false,GoalCelebrationUsed=true,PendingShot=false,PendingTrip=false;
- bool GoalHoldRequested=false; float MoveForward=0,MoveRight=0;
+	bool GoalHoldRequested=false; float MoveForward=0,MoveRight=0;
+	FVector SmoothedGamepadMoveInput=FVector::ZeroVector;
  FVector ShotBallStart=FVector::ZeroVector,ShotActorStart=FVector::ZeroVector;
  float SpaceStarted=0,GoalUntil=-1,ShotContactTime=0,ShotRecoverTime=0;
  FVector PendingVelocity=FVector::ZeroVector,PendingAimTarget=FVector::ZeroVector,ShotEntryVelocity=FVector::ZeroVector;
