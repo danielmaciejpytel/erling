@@ -38,15 +38,6 @@ void AFootballPlayer::ConfigurePiece(USkeletalMeshComponent* Piece)
 	else if (PieceName == TEXT("SK_shoe"))
 		InkMask = 6;
 	Piece->SetCustomDepthStencilValue(InkMask);
-	for (int32 Index = 0; Index < Piece->GetNumMaterials(); ++Index)
-	{
-		if (auto* Original = Piece->GetMaterial(Index))
-		{
-			const FString Path = FString::Printf(TEXT("/Game/Erling/ArtDirection/%s.%s"), *Original->GetName(), *Original->GetName());
-			if (auto* Styled = LoadObject<UMaterialInterface>(nullptr, *Path))
-				Piece->SetMaterial(Index, Styled);
-		}
-	}
 	if (bIsHair)
 	{
 		if (auto* HairMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_hair_toon.M_hair_toon")))

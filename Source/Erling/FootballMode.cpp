@@ -87,7 +87,7 @@ void AFootballMode::BeginPlay()
 	Ball->BodyInstance.bUseCCD = true;
 	Ball->SetNotifyRigidBodyCollision(true);
 	Ball->OnComponentHit.AddDynamic(this, &AFootballMode::NetHit);
-	if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/ArtDirection/M_Ball.M_Ball")))
+	if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))
 		Ball->SetMaterial(0, M);
 	Ball->SetRenderCustomDepth(true);
 	Ball->SetCustomDepthStencilValue(1);
