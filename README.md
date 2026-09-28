@@ -11,7 +11,8 @@ The current prototype focuses on making a small football sandbox feel responsive
 - **Custom animation runtime** — 24 animation clips cover locomotion, kicks, jumps, turns, slides, trips, recovery, celebrations and emotes. Gait transitions preserve animation phase and blend between clips while CharacterMovement owns world motion.
 - **Three gameplay cameras** — Smooth, Reduced and a fixed **Pitch** view inspired by football games, with camera-relative movement where appropriate.
 - **Keyboard, mouse and gamepad support** — gameplay and character-editor controls are mapped for both desktop input and Xbox-style controllers.
-- **Modular character creator** — hairstyle, face, shirt, shorts and footwear are assembled from skeletal-mesh pieces and face textures driven by `wardrobe.json`, with saved appearance presets.
+- **Modular character creator** — hairstyle, face, shirt, shorts and footwear are assembled from skeletal-mesh pieces driven by `wardrobe.json`, with saved appearance presets.
+- **Animated layered faces** — six expressions (smile, joy, anger, surprise, sleepy, tired) are built from separate brow, eye, pupil, lid, teeth, tongue and mouth layers. A single material composites them and moves individual layers, so each face blinks, glances, raises its brows or sways its tongue in its own way, and switching faces cross-fades smoothly.
 - **UMG UI and HUD** — main menu, character editor, settings, pause screen, credits, goal counter, contextual shot feedback and an in-game control strip share one visual language in a single widget blueprint, with English and Polish text.
 - **Persistent settings** — appearance, camera mode, sensitivity, audio levels and graphics quality are stored through Unreal's save system.
 
@@ -39,6 +40,7 @@ The character editor also supports drag-to-rotate, `Q` / `E` rotation and mouse-
 - Unreal physics simulation for the ball and goal net
 - Custom `UAnimInstance` proxy for clip sampling and blending
 - Custom `UCharacterMovementComponent` behavior for momentum and action movement
+- Layered face material: full-canvas expression layers packed into one `Texture2DArray`, composited and animated per layer through material parameters set from C++
 - JSON-driven modular wardrobe data
 - `USaveGame` persistence for player appearance and settings
 
