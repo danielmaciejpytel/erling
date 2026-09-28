@@ -36,6 +36,15 @@ public:
  UPROPERTY() TArray<USkeletalMeshComponent*> Pieces;
  UPROPERTY() USkeletalMeshComponent* Face;
  UPROPERTY() UMaterialInstanceDynamic* FaceMaterial;
+ int32 CurrentFace=-1, NextFace=-1, QueuedFace=-1;
+ float FaceBlendElapsed=0.f, FaceMotionElapsed=0.f;
+ enum class EFaceClip : uint8 { Idle, Blink, Gaze, Mouth, Accent };
+ EFaceClip FaceClip=EFaceClip::Idle;
+ float FaceClipElapsed=0.f, NextBlinkAt=0.f, NextGazeAt=0.f, NextMouthAt=0.f, NextAccentAt=0.f;
+ int32 GazeDirection=1, MouthDirection=1, AccentDirection=1;
+ void SetFaceExpression(const FString& TexturePath);
+ void ScheduleFaceMotion(int32 Expression);
+ void UpdateFaceMaterial(float Dt);
  UPROPERTY() TMap<FString,UAnimSequence*> Animations;
  FString CurrentAnimation; float KickUntil=0;
  enum class EAction:uint8 { None,Kick,Flip,Slide,Trip,Emote,Fall,GetUp };
