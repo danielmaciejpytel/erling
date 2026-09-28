@@ -159,7 +159,7 @@ void UErlingInterface::HandleAction(EErlingUIAction Action, int32 Index)
     case EErlingUIAction::PreviewPrevious: C->CycleAnimationPreview(-1); break;
     case EErlingUIAction::PreviewNext: C->CycleAnimationPreview(1); break;
     case EErlingUIAction::Language: S->Language=1-S->Language; C->SaveSettings(); break;
-    case EErlingUIAction::Camera: S->CameraMode=(S->CameraMode+1)%3; S->ReducedMotion=S->CameraMode==1; C->CameraPivotInitialized=false; C->PitchCameraLeadX=0; break;
+    case EErlingUIAction::Camera: S->CameraMode=(S->CameraMode+1)%3; S->ReducedMotion=S->CameraMode==1; C->CameraRig->CameraPivotInitialized=false; C->CameraRig->PitchCameraLeadX=0; break;
     case EErlingUIAction::Quality: S->Quality=(S->Quality+1)%4; C->ApplyQuality(); break;
     case EErlingUIAction::PauseInSettings: S->PauseInSettings=!S->PauseInSettings; C->SetPause(C->SettingsReturn==Screen::Pause || S->PauseInSettings); break;
     case EErlingUIAction::SaveSettings: C->SaveSettings(); C->ChangeScreen(C->SettingsReturn); break;

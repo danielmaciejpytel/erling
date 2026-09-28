@@ -646,8 +646,8 @@ void AFootballController::RunChecks()
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
     case 53:
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());UE_LOG(LogTemp,Display,TEXT("TURN_SKID remaining=%f velocity=%s input=%s mode=%d"),Move->TurnSkidRemaining,*Move->Velocity.ToString(),*Move->LastMoveInputDirection.ToString(),int32(Move->MovementMode));Check(TEXT("sharp_turn_starts_momentum_skid"),Move->TurnSkidRemaining>0.f);Check(TEXT("sharp_turn_keeps_some_momentum"),Move->Velocity.X>250.f);}
-        Forward(0);ResetPlayer();PitchCameraLeadX=160.f;Avatar->GetCharacterMovement()->Velocity=FVector(-765,0,0);{const float Before=PitchCameraLeadX;UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_lead_does_not_snap_on_direction_change"),PitchCameraLeadX>0.f&&FMath::Abs(PitchCameraLeadX-Before)<40.f);}
-        Avatar->StartAction(AFootballPlayer::EAction::Kick,TEXT("Kick_Right"),2.2f);Avatar->EntryVelocity=FVector(510,0,0);Avatar->GetCharacterMovement()->Velocity=FVector::ZeroVector;PitchCameraLeadX=100.f;UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_keeps_shot_momentum"),PitchCameraLeadX>=100.f);Avatar->ClearAction();
+        Forward(0);ResetPlayer();CameraRig->PitchCameraLeadX=160.f;Avatar->GetCharacterMovement()->Velocity=FVector(-765,0,0);{const float Before=CameraRig->PitchCameraLeadX;CameraRig->UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_lead_does_not_snap_on_direction_change"),CameraRig->PitchCameraLeadX>0.f&&FMath::Abs(CameraRig->PitchCameraLeadX-Before)<40.f);}
+        Avatar->StartAction(AFootballPlayer::EAction::Kick,TEXT("Kick_Right"),2.2f);Avatar->EntryVelocity=FVector(510,0,0);Avatar->GetCharacterMovement()->Velocity=FVector::ZeroVector;CameraRig->PitchCameraLeadX=100.f;CameraRig->UpdatePitchCameraLead(1.f/60.f);Check(TEXT("pitch_camera_keeps_shot_momentum"),CameraRig->PitchCameraLeadX>=100.f);Avatar->ClearAction();
         ResetPlayer();Avatar->ConsumeMovementInputVector();Saved->CameraMode=0;Yaw=0;SprintOn();{auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(-1);Wait=.05f;break;
     case 54:
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());UE_LOG(LogTemp,Display,TEXT("SPRINT_TURN_SKID remaining=%f velocity=%s"),Move->TurnSkidRemaining,*Move->Velocity.ToString());Check(TEXT("sprint_sharp_turn_skid"),Move->TurnSkidRemaining>.1f);Check(TEXT("sprint_turn_carries_more_momentum"),Move->Velocity.X>500.f);}
@@ -1144,11 +1144,11 @@ void AFootballController::RunChecks()
         Check(TEXT("sprint_to_run_player_catches_then_carries"),ContactTestAcquired&&ContactTestMinFoot<=55.f&&Mode->Possession->PossessionActive&&!Sprint&&Avatar->GetVelocity().Size2D()>400.f);
         Forward(0);Wait=.1f;break;
     case 160:
-        ResetPlayer();Avatar->SetActorLocation(FVector(2300,500,100));Yaw=0;Pitch=-40;CameraPivotInitialized=false;Wait=.6f;break;
+        ResetPlayer();Avatar->SetActorLocation(FVector(2300,500,100));Yaw=0;Pitch=-40;CameraRig->CameraPivotInitialized=false;Wait=.6f;break;
     case 161:
         Screenshot(TEXT("Goal_Roof_Positive"));Wait=.2f;break;
     case 162:
-        ResetPlayer();Avatar->SetActorLocation(FVector(-2300,500,100));Yaw=180;Pitch=-40;CameraPivotInitialized=false;Wait=.6f;break;
+        ResetPlayer();Avatar->SetActorLocation(FVector(-2300,500,100));Yaw=180;Pitch=-40;CameraRig->CameraPivotInitialized=false;Wait=.6f;break;
     case 163:
         Screenshot(TEXT("Goal_Roof_Negative"));Wait=.2f;break;
     case 164:
@@ -1198,25 +1198,25 @@ void AFootballController::RunChecks()
         Mode->ResetBall();Mode->ShotInFlight=true;
         for(float Sign:{-1.f,1.f})
         {
-            PitchShotSeen=-100.f;PitchShotHoldRemaining=0.f;PitchShotOffset=FVector::ZeroVector;Mode->LastShot=Now;Mode->Scored=false;Mode->BallHidden=false;
+            CameraRig->PitchShotSeen=-100.f;CameraRig->PitchShotHoldRemaining=0.f;CameraRig->PitchShotOffset=FVector::ZeroVector;Mode->LastShot=Now;Mode->Scored=false;Mode->BallHidden=false;
             Mode->Ball->SetWorldLocation(FVector(0,0,100),false,nullptr,ETeleportType::TeleportPhysics);
             Mode->Ball->SetPhysicsLinearVelocity(FVector(Sign*1600,0,200));
             const FVector Cam(0,1500,1150),Normal(0,-280,170);
-            const FVector Start=UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
-            Check(Sign>0?TEXT("pitch_camera_tracks_offscreen_right_goal"):TEXT("pitch_camera_tracks_offscreen_left_goal"),PitchShotTracking&&Sign*(Start.X-Normal.X)>0.f&&(Start-Normal).Size()<100.f);
-            for(int32 I=0;I<60;I++)UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
-            const float BeforeReturn=PitchShotOffset.Size();
+            const FVector Start=CameraRig->UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
+            Check(Sign>0?TEXT("pitch_camera_tracks_offscreen_right_goal"):TEXT("pitch_camera_tracks_offscreen_left_goal"),CameraRig->PitchShotTracking&&Sign*(Start.X-Normal.X)>0.f&&(Start-Normal).Size()<100.f);
+            for(int32 I=0;I<60;I++)CameraRig->UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
+            const float BeforeReturn=CameraRig->PitchShotOffset.Size();
             if(Sign>0)Mode->Scored=true;else Mode->BallHidden=true;
-            UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
-            Check(Sign>0?TEXT("pitch_camera_goal_holds_before_return"):TEXT("pitch_camera_miss_holds_before_return"),!PitchShotTracking&&PitchShotHoldRemaining>.5f&&PitchShotOffset.Size()>BeforeReturn*.95f);
-            for(int32 I=0;I<300;I++)UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
-            Check(TEXT("pitch_camera_return_settles"),PitchShotOffset.Size()<1.f);
+            CameraRig->UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
+            Check(Sign>0?TEXT("pitch_camera_goal_holds_before_return"):TEXT("pitch_camera_miss_holds_before_return"),!CameraRig->PitchShotTracking&&CameraRig->PitchShotHoldRemaining>.5f&&CameraRig->PitchShotOffset.Size()>BeforeReturn*.95f);
+            for(int32 I=0;I<300;I++)CameraRig->UpdatePitchShotTarget(1.f/60,Cam,Normal,68);
+            Check(TEXT("pitch_camera_return_settles"),CameraRig->PitchShotOffset.Size()<1.f);
         }
-        Mode->Scored=false;Mode->BallHidden=false;PitchShotSeen=-100.f;PitchShotHoldRemaining=0.f;PitchShotOffset=FVector::ZeroVector;
+        Mode->Scored=false;Mode->BallHidden=false;CameraRig->PitchShotSeen=-100.f;CameraRig->PitchShotHoldRemaining=0.f;CameraRig->PitchShotOffset=FVector::ZeroVector;
         Mode->Ball->SetWorldLocation(FVector(2400,0,100),false,nullptr,ETeleportType::TeleportPhysics);
         Mode->Ball->SetPhysicsLinearVelocity(FVector(1600,0,100));
         const FVector Normal(2400,-280,170);
-        Check(TEXT("pitch_camera_visible_goal_keeps_normal_view"),UpdatePitchShotTarget(1.f/60,FVector(2400,1500,1150),Normal,68).Equals(Normal)&&!PitchShotTracking);
+        Check(TEXT("pitch_camera_visible_goal_keeps_normal_view"),CameraRig->UpdatePitchShotTarget(1.f/60,FVector(2400,1500,1150),Normal,68).Equals(Normal)&&!CameraRig->PitchShotTracking);
         Mode->ResetBall();Wait=.1f;break;
     }
     case 177:
@@ -1269,18 +1269,18 @@ void AFootballController::RunChecks()
         UE_LOG(LogTemp,Display,TEXT("FINISHED_BALLS_WORLD total=%d retained=%d evicted=%d"),WorldBalls,Mode->FinishedBalls.Num(),EvictedFinishedBalls.Num());
         Check(TEXT("finished_ball_actors_gone_next_frame"),EvictedGone);
         Check(TEXT("world_has_five_finished_balls_plus_live_ball"),WorldBalls==ErlingBall::MaxFinishedBalls+1);
-        Mode->ResetBall();PitchViewInitialized=false;PitchShotTracking=false;PitchShotHoldRemaining=0.f;
+        Mode->ResetBall();CameraRig->PitchViewInitialized=false;CameraRig->PitchShotTracking=false;CameraRig->PitchShotHoldRemaining=0.f;
         const FVector Start(100,200,100),Moved(1100,-600,100);
-        UpdatePitchViewCenter(1.f/60,Start);Mode->ShotInFlight=true;Mode->LastShot=Now;
-        for(int32 I=0;I<60;I++)UpdatePitchViewCenter(1.f/60,Moved);
-        Check(TEXT("pitch_shot_anchor_ignores_player_movement"),PitchViewCenter.Equals(Start,.01f));
-        Mode->Scored=true;PitchShotHoldRemaining=1.f;
-        Check(TEXT("pitch_goal_hold_anchor_ignores_player_movement"),UpdatePitchViewCenter(1.f/60,Moved).Equals(Start,.01f));
-        PitchShotHoldRemaining=0.f;const FVector First=UpdatePitchViewCenter(1.f/60,Moved);
+        CameraRig->UpdatePitchViewCenter(1.f/60,Start);Mode->ShotInFlight=true;Mode->LastShot=Now;
+        for(int32 I=0;I<60;I++)CameraRig->UpdatePitchViewCenter(1.f/60,Moved);
+        Check(TEXT("pitch_shot_anchor_ignores_player_movement"),CameraRig->PitchViewCenter.Equals(Start,.01f));
+        Mode->Scored=true;CameraRig->PitchShotHoldRemaining=1.f;
+        Check(TEXT("pitch_goal_hold_anchor_ignores_player_movement"),CameraRig->UpdatePitchViewCenter(1.f/60,Moved).Equals(Start,.01f));
+        CameraRig->PitchShotHoldRemaining=0.f;const FVector First=CameraRig->UpdatePitchViewCenter(1.f/60,Moved);
         Check(TEXT("pitch_anchor_returns_without_snap"),!First.Equals(Start)&&(First-Start).Size()<100.f&&(First-Moved).Size()>100.f);
-        for(int32 I=0;I<240;I++)UpdatePitchViewCenter(1.f/60,Moved);
-        Check(TEXT("pitch_anchor_return_reaches_current_player"),PitchViewCenter.Equals(Moved,.1f));
-        Mode->ResetBall();PitchViewInitialized=false;Wait=.1f;break;
+        for(int32 I=0;I<240;I++)CameraRig->UpdatePitchViewCenter(1.f/60,Moved);
+        Check(TEXT("pitch_anchor_return_reaches_current_player"),CameraRig->PitchViewCenter.Equals(Moved,.1f));
+        Mode->ResetBall();CameraRig->PitchViewInitialized=false;Wait=.1f;break;
     }
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));

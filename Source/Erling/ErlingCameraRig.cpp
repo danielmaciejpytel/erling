@@ -1,63 +1,35 @@
+#include "ErlingCameraRig.h"
 #include "Football.h"
-#include "ErlingAnimation.h"
-#include "ErlingInterface.h"
 #include "ErlingTuning.h"
-#include "ErlingStylizedGoal.h"
-#include "HAL/PlatformProcess.h"
-#include "Components/AudioComponent.h"
-#include "Sound/SoundWave.h"
-#include "HAL/IConsoleManager.h"
-#include "SkeletalRenderPublic.h"
-#include "TimerManager.h"
-#include "AudioDevice.h"
-#include "UnrealClient.h"
-#include "HAL/PlatformMisc.h"
-#include "Misc/CommandLine.h"
-#include "Misc/Parse.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
-#include "Components/CapsuleComponent.h"
-#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/DirectionalLightComponent.h"
-#include "Components/SkyLightComponent.h"
-#include "Components/SkyAtmosphereComponent.h"
-#if WITH_EDITOR
-#include "AssetCompilingManager.h"
-#endif
-#include "Engine/DirectionalLight.h"
-#include "Engine/SkyLight.h"
-#include "Engine/StaticMeshActor.h"
-#include "Engine/StaticMesh.h"
-#include "Engine/Texture2D.h"
 #include "Engine/World.h"
-#include "Engine/GameViewportClient.h"
-#include "Animation/AnimSequence.h"
-#include "Animation/AnimSingleNodeInstance.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/GameUserSettings.h"
-#include "Kismet/GameplayStatics.h"
-#include "Kismet/KismetSystemLibrary.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "PhysicalMaterials/PhysicalMaterial.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
-void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootballMode* GameplayMode, const FVector& P)
+
+UErlingCameraRig::UErlingCameraRig()
 {
+	PrimaryComponentTick.bCanEverTick = false;
+}
+AFootballController* UErlingCameraRig::Controller() const
+{
+	return CastChecked<AFootballController>(GetOwner());
+}
+void UErlingCameraRig::Update(float Dt, bool bGameplayView, bool bEditorView, AFootballMode* GameplayMode, const FVector& P)
+{
+	AFootballController* C = Controller();
+	ACameraActor* ViewCamera = C->ViewCamera;
 	FVector Cam, Target;
 	float Fov = 48;
-	const bool GameplayView = ActiveScreen == EScreen::Game || ActiveScreen == EScreen::Pause;
+	const bool GameplayView = bGameplayView;
 	auto& Look = ViewCamera->GetCameraComponent()->PostProcessSettings;
 	Look.bOverride_DepthOfFieldFocalDistance = true;
-	Look.DepthOfFieldFocalDistance = (!GameplayView && ActiveScreen != EScreen::Editor) ? 780.f : 0.f;
+	Look.DepthOfFieldFocalDistance = (!GameplayView && !bEditorView) ? 780.f : 0.f;
 	Look.bOverride_DepthOfFieldFstop = true;
 	Look.DepthOfFieldFstop = 4.f;
 
 	if (GameplayView)
 	{
-		const int32 Mode = Saved ? FMath::Clamp(Saved->CameraMode, 0, 2) : 0;
+		const int32 Mode = C->Saved ? FMath::Clamp(C->Saved->CameraMode, 0, 2) : 0;
 		if (!CameraPivotInitialized)
 		{
 			CameraPivot = P;
@@ -86,17 +58,17 @@ void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootball
 			PitchShotOffset = FVector::ZeroVector;
 			if (GameplayMode)
 				PitchShotSeen = GameplayMode->LastShot;
-			const float TopDown = FMath::Clamp((-Pitch - 15.f) / 25.f, 0.f, 1.f);
+			const float TopDown = FMath::Clamp((-C->Pitch - 15.f) / 25.f, 0.f, 1.f);
 			const float LookAhead = FMath::Lerp(350.f, 180.f, TopDown);
-			const FVector ForwardDir = FRotator(0, Yaw, 0).Vector();
+			const FVector ForwardDir = FRotator(0, C->Yaw, 0).Vector();
 			Target = CameraPivot + ForwardDir * LookAhead + FVector(0, 0, 40);
-			Cam = CameraPivot - FRotator(Pitch, Yaw, 0).Vector() * 750 + FVector(0, 0, 300);
+			Cam = CameraPivot - FRotator(C->Pitch, C->Yaw, 0).Vector() * 750 + FVector(0, 0, 300);
 			Fov = 65;
 		}
 		ViewCamera->SetActorLocationAndRotation(Cam, (Target - Cam).Rotation());
 		ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView, Fov, Dt, 8.f));
 	}
-	else if (ActiveScreen != EScreen::Editor)
+	else if (!bEditorView)
 	{
 		// Low presentation camera keeps the existing football demo and saved wardrobe.
 		const FVector Side(.31f, .95f, 0);
@@ -110,10 +82,10 @@ void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootball
 	}
 	else
 	{
-		bool Close = ActiveScreen == EScreen::Editor;
+		bool Close = bEditorView;
 		Target = P + FVector(0, 0, 0);
 		if (Close)
-			Fov = FMath::Lerp(48.f, 34.f, EditorZoom);
+			Fov = FMath::Lerp(48.f, 34.f, C->EditorZoom);
 		FVector Side = FVector(.65f, .76f, 0);
 		Target += Side * (Close ? 170 * Fov / 48 : 220);
 		Cam = P + FVector(Close ? 470 : 760, Close ? -620 : -1000, Close ? 190 : 310);
@@ -124,8 +96,9 @@ void AFootballController::UpdateCamera(float Dt, EScreen ActiveScreen, AFootball
 		ViewCamera->GetCameraComponent()->SetFieldOfView(FMath::FInterpTo(ViewCamera->GetCameraComponent()->FieldOfView, Fov, Dt, Speed));
 	}
 }
-float AFootballController::UpdatePitchCameraLead(float Dt)
+float UErlingCameraRig::UpdatePitchCameraLead(float Dt)
 {
+	const AFootballPlayer* Avatar = Controller()->Avatar;
 	if (!Avatar)
 		return PitchCameraLeadX;
 	const bool ShotAction = Avatar->Action == AFootballPlayer::EAction::Kick || Avatar->Action == AFootballPlayer::EAction::Flip;
@@ -134,7 +107,7 @@ float AFootballController::UpdatePitchCameraLead(float Dt)
 	PitchCameraLeadX = FMath::FInterpTo(PitchCameraLeadX, DesiredLeadX, Dt, 4.5f);
 	return PitchCameraLeadX;
 }
-FVector AFootballController::UpdatePitchShotTarget(float Dt, const FVector& Cam, const FVector& NormalTarget, float Fov)
+FVector UErlingCameraRig::UpdatePitchShotTarget(float Dt, const FVector& Cam, const FVector& NormalTarget, float Fov)
 {
 	auto* M = GetWorld()->GetAuthGameMode<AFootballMode>();
 	if (!M || !M->Ball)
@@ -150,7 +123,7 @@ FVector AFootballController::UpdatePitchShotTarget(float Dt, const FVector& Cam,
 		// Evaluate the goal mouth in the normal player-anchored view at shot release.
 		const FRotationMatrix Basis((NormalTarget - Cam).Rotation());
 		int32 Width = 0, Height = 0;
-		GetViewportSize(Width, Height);
+		Controller()->GetViewportSize(Width, Height);
 		const float Aspect = Width > 0 && Height > 0 ? float(Width) / Height : 16.f / 9.f;
 		const float TanHorizontal = FMath::Tan(FMath::DegreesToRadians(Fov * .5f));
 		bool GoalVisible = true;
@@ -192,7 +165,7 @@ FVector AFootballController::UpdatePitchShotTarget(float Dt, const FVector& Cam,
 		PitchShotOffset = FVector::ZeroVector;
 	return NormalTarget + PitchShotOffset;
 }
-FVector AFootballController::UpdatePitchViewCenter(float Dt, const FVector& Desired)
+FVector UErlingCameraRig::UpdatePitchViewCenter(float Dt, const FVector& Desired)
 {
 	auto* M = GetWorld()->GetAuthGameMode<AFootballMode>();
 	if (!PitchViewInitialized)
