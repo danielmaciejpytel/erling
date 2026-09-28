@@ -57,7 +57,7 @@ void UErlingCameraRig::Update(float Dt, bool bGameplayView, bool bEditorView, AF
 			PitchShotHoldRemaining = 0.f;
 			PitchShotOffset = FVector::ZeroVector;
 			if (GameplayMode)
-				PitchShotSeen = GameplayMode->LastShot;
+				PitchShotSeen = GameplayMode->Referee->LastShot;
 			const float TopDown = FMath::Clamp((-C->Pitch - 15.f) / 25.f, 0.f, 1.f);
 			const float LookAhead = FMath::Lerp(350.f, 180.f, TopDown);
 			const FVector ForwardDir = FRotator(0, C->Yaw, 0).Vector();
@@ -114,9 +114,9 @@ FVector UErlingCameraRig::UpdatePitchShotTarget(float Dt, const FVector& Cam, co
 		return NormalTarget;
 	const float Now = GetWorld()->GetTimeSeconds();
 	const FVector BallPosition = M->Ball->GetComponentLocation(), Velocity = M->Ball->GetPhysicsLinearVelocity();
-	if (M->ShotInFlight && M->LastShot != PitchShotSeen)
+	if (M->Referee->ShotInFlight && M->Referee->LastShot != PitchShotSeen)
 	{
-		PitchShotSeen = M->LastShot;
+		PitchShotSeen = M->Referee->LastShot;
 		PitchShotTracking = false;
 		PitchShotHoldRemaining = 0.f;
 		PitchShotGoalX = ErlingPitch::GoalPlaneFor(Velocity.X);
@@ -136,14 +136,14 @@ FVector UErlingCameraRig::UpdatePitchShotTarget(float Dt, const FVector& Cam, co
 				               FMath::Abs(FVector::DotProduct(Delta, Basis.GetUnitAxis(EAxis::Y))) <= Depth * TanHorizontal * .95f &&
 				               FMath::Abs(FVector::DotProduct(Delta, Basis.GetUnitAxis(EAxis::Z))) <= Depth * TanHorizontal / Aspect * .95f;
 			}
-		PitchShotTracking = !GoalVisible && !M->Scored && !M->BallHidden && FMath::Abs(Velocity.X) > 150.f;
+		PitchShotTracking = !GoalVisible && !M->Referee->Scored && !M->Referee->BallHidden && FMath::Abs(Velocity.X) > 150.f;
 		PitchShotStarted = Now;
 	}
-	if (PitchShotTracking && (M->Scored || M->BallHidden || !M->ShotInFlight || Now - PitchShotStarted > 8.f ||
+	if (PitchShotTracking && (M->Referee->Scored || M->Referee->BallHidden || !M->Referee->ShotInFlight || Now - PitchShotStarted > 8.f ||
 	                             (Now - PitchShotStarted > .4f && (Velocity.Size2D() < 120.f || Velocity.X * PitchShotGoalX < 0.f))))
 	{
 		PitchShotTracking = false;
-		PitchShotHoldRemaining = M->Scored ? 1.4f : .65f;
+		PitchShotHoldRemaining = M->Referee->Scored ? 1.4f : .65f;
 		PitchShotHoldTarget = FMath::Lerp(BallPosition, FVector(PitchShotGoalX, 0, 130), .12f);
 	}
 	FVector DesiredOffset = FVector::ZeroVector;
@@ -174,8 +174,8 @@ FVector UErlingCameraRig::UpdatePitchViewCenter(float Dt, const FVector& Desired
 		PitchViewInitialized = true;
 		PitchViewReturning = false;
 	}
-	const float ShotAge = M ? GetWorld()->GetTimeSeconds() - M->LastShot : 0.f;
-	const bool LiveShot = M && M->Ball && M->ShotInFlight && !M->Scored && !M->BallHidden && ShotAge < 8.f &&
+	const float ShotAge = M ? GetWorld()->GetTimeSeconds() - M->Referee->LastShot : 0.f;
+	const bool LiveShot = M && M->Ball && M->Referee->ShotInFlight && !M->Referee->Scored && !M->Referee->BallHidden && ShotAge < 8.f &&
 	                      (ShotAge <= .4f || M->Ball->GetPhysicsLinearVelocity().Size2D() >= 120.f);
 	// Freeze the complete camera anchor, including movement lead. The live player
 	// pivot may keep updating, but cannot move or tilt the shot's camera frame.

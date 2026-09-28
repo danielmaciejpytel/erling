@@ -137,13 +137,13 @@ void AFootballController::RunProjectChecks()
 			{
 				Check(TEXT("ball_kick_impulse"), Mode->Ball->GetPhysicsLinearVelocity().Size() > 100);
 				Mode->ResetBall();
-				Mode->PreviousBall = FVector(2600, 0, 90);
+				Mode->Referee->PreviousBall = FVector(2600, 0, 90);
 				Mode->Ball->SetWorldLocation(FVector(2800, 0, 90), false, nullptr, ETeleportType::TeleportPhysics);
-				int32 Before = Mode->Goals;
+				int32 Before = Mode->Referee->Goals;
 				Mode->Tick(.01f);
-				Check(TEXT("goal_count"), Mode->Goals == Before + 1);
+				Check(TEXT("goal_count"), Mode->Referee->Goals == Before + 1);
 				Mode->Tick(.01f);
-				Check(TEXT("goal_debounce"), Mode->Goals == Before + 1);
+				Check(TEXT("goal_debounce"), Mode->Referee->Goals == Before + 1);
 			}
 			PauseToggle();
 			Check(TEXT("pause"), IsPaused());
@@ -202,7 +202,7 @@ void AFootballController::RunProjectChecks()
 			break;
 		case 15:
 			Mode->ResetBall();
-			Mode->LastShot = -10;
+			Mode->Referee->LastShot = -10;
 			Avatar->SetActorLocation(FVector(-350, 0, 100));
 			Avatar->GetCharacterMovement()->StopMovementImmediately();
 			Mode->Ball->SetWorldLocation(FVector(-240, 0, 22));
@@ -266,14 +266,14 @@ void AFootballController::RunProjectChecks()
 			ChangeScreen(EScreen::Game);
 			Mode->ResetBall();
 			Mode->Ball->SetWorldLocation(FVector(2800, 1000, 22));
-			Mode->PreviousBall = FVector(2650, 1000, 22);
-			Mode->ShotInFlight = true;
+			Mode->Referee->PreviousBall = FVector(2650, 1000, 22);
+			Mode->Referee->ShotInFlight = true;
 			Mode->Tick(.01f);
-			Check(TEXT("miss_disappears"), Mode->BallHidden);
+			Check(TEXT("miss_disappears"), Mode->Referee->BallHidden);
 			Mode->ResetBall();
 			Mode->Ball->SetWorldLocation(FVector(2800, 1000, 22));
 			Mode->Tick(.01f);
-			Check(TEXT("carried_ball_outside_stays"), !Mode->BallHidden);
+			Check(TEXT("carried_ball_outside_stays"), !Mode->Referee->BallHidden);
 			Check(TEXT("goal_sound_loaded"), Mode->GoalSound != nullptr);
 			FVector Pos(0, 0, 22), Dir(1, 0, 0);
 			auto Pass = AFootballMode::ShotVelocity(Pos, Dir, 0);
@@ -321,7 +321,7 @@ void AFootballController::RunProjectChecks()
 		case 29:
 			ChangeScreen(EScreen::Game);
 			Mode->ResetBall();
-			Mode->Scored = true;
+			Mode->Referee->Scored = true;
 			// This tick still runs the demo update, which zeroes the ball's velocity.
 			// Launch it on the next tick, once the game screen is active.
 			GetWorldTimerManager().SetTimerForNextTick(

@@ -298,12 +298,10 @@ void AFootballPlayer::BeginTurn(float TargetYaw)
 
 bool AFootballMode::LaunchShot(AFootballPlayer* P, const FVector& Velocity, bool CommittedShot)
 {
-	if (!P || !Ball || BallHidden || Scored ||
+	if (!P || !Ball || Referee->BallHidden || Referee->Scored ||
 	    (!CommittedShot && FVector::Dist2D(Ball->GetComponentLocation(), P->GetActorLocation()) > 240))
 		return false;
-	LastShot = GetWorld()->GetTimeSeconds();
-	LastShooter = P;
-	ShotInFlight = true;
+	Referee->StartShot(P);
 	Possession->ReleaseForShot();
 	P->CancelBallTrap();
 	ClearSprintReleaseRecovery();
@@ -375,7 +373,7 @@ void AFootballController::UpdateActions(float Dt)
 	{
 		auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>();
 		const bool Invalid =
-		    ActiveScreen != EScreen::Game || !Mode || !Mode->Ball || Mode->BallHidden || Mode->Scored || Mode->ShotInFlight;
+		    ActiveScreen != EScreen::Game || !Mode || !Mode->Ball || Mode->Referee->BallHidden || Mode->Referee->Scored || Mode->Referee->ShotInFlight;
 		if (Invalid || Now - ShotBufferStarted > ShotBufferWindow)
 		{
 			ShotBufferActive = false;
@@ -413,7 +411,7 @@ void AFootballController::UpdateActions(float Dt)
 	}
 	if (PendingShot)
 	{
-		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->BallHidden)
+		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->Referee->BallHidden)
 		{
 			const float Side = Avatar->CurrentAnimation == TEXT("Kick_Left") ? -18.f : 18.f;
 			const FVector Contact = Avatar->GetActorLocation() + Avatar->GetActorForwardVector() * 82 +
@@ -554,7 +552,7 @@ void AFootballController::UpdateActions(float Dt)
 		// fail the action rather than resurrecting the old remote/ghost kick.
 		PendingShot = false;
 		PendingTrip = false;
-		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->BallHidden && !Mode->ShotInFlight)
+		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->Referee->BallHidden && !Mode->Referee->ShotInFlight)
 			Mode->Ball->SetLinearDamping(.3f);
 	}
 	if (PendingTrip && !PendingShot && Avatar->ActionElapsed >= ShotRecoverTime)
