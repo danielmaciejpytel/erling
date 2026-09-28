@@ -1034,13 +1034,14 @@ void AFootballController::RunChecks()
     case 140:
         {const float Age=Now-ShotBufferStarted;UE_LOG(LogTemp,Display,TEXT("BUFFER_REACQUIRE_130 age=%f active=%d"),Age,ShotBufferActive?1:0);Check(TEXT("buffer_survives_130_before_contact"),ShotBufferActive&&!PendingShot&&Age>1.2f&&Age<1.39f);PutBallAtNearestFoot();}Wait=.08f;break;
     case 141:
-        Check(TEXT("buffer_commits_after_130_recontact"),!ShotBufferActive&&PendingShot);Wait=.75f;break;
+        // Power .85 is an under-bar shot: the salto launches at contact, so it may already be in flight.
+        Check(TEXT("buffer_commits_after_130_recontact"),!ShotBufferActive&&(PendingShot||Mode->ShotInFlight));Wait=.75f;break;
     case 142:
         Check(TEXT("buffer_130_launches"),Mode->ShotInFlight&&!PendingShot);Wait=.1f;break;
     case 143:
         ResetPlayer();Mode->ResetBall();Mode->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->Possession->SprintDribbleTouchCount=0;Mode->Possession->DribbleDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseUntil=Now+.3f;Mode->Possession->SprintNextTouchAt=0.f;
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
-        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(FVector(Foot.X+45.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(900,0,0));StartCharge();}
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(FVector(Foot.X+30.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(765,0,0));StartCharge();}
         Check(TEXT("rapid_touch_shot_charge_starts_before_recontact"),Charging);Forward(-1);Wait=.14f;break;
     case 144:
         {const int32 Touches=Mode->Possession->SprintDribbleTouchCount;UE_LOG(LogTemp,Display,TEXT("RAPID_TOUCH_SHOT touches=%d release=%s pending_touch=%d charging=%d"),Touches,*Mode->Possession->SprintReleaseDirection.ToString(),Mode->Possession->SprintKickPending?1:0,Charging?1:0);
