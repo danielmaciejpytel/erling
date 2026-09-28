@@ -12,10 +12,6 @@ namespace ErlingPitch
 	inline constexpr float GoalPlaneX = 2762.f;
 	/** Past this X a ball that is outside the mouth counts as a miss. */
 	inline constexpr float MissCheckX = 2720.f;
-	/** Centre of the goal net side/roof collision (depth-wise). */
-	inline constexpr float NetCenterX = 2870.f;
-	/** Back of the goal net. */
-	inline constexpr float NetBackX = 2990.f;
 	/** Goal post Y position (half the visual goal width). */
 	inline constexpr float GoalPostY = 350.f;
 	/** Crossbar height. */

@@ -61,7 +61,7 @@ public:
  UPROPERTY() class USoundBase* GoalSound=nullptr;
  bool ShotInFlight=false,BallHidden=false;
  UFUNCTION() void NetHit(UPrimitiveComponent* HitComponent,AActor* OtherActor,UPrimitiveComponent* OtherComp,FVector NormalImpulse,const FHitResult& Hit);
- void CreateNetCollision(); void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
+ void HideMiss(); static FVector ShotVelocity(const FVector& Position,const FVector& Direction,float Seconds);
  int32 Goals=0; float ResetAt=0; bool Scored=false; FVector PreviousBall=FVector::ZeroVector; float LastShot=-10;
  UFUNCTION(BlueprintPure, Category="Football|Validation") int32 GetGoalCountForValidation() const { return Goals; }
  /** Possession / dribbling state and logic (see ErlingBallPossession.h). */
@@ -69,7 +69,7 @@ public:
  void Dribble(AFootballPlayer* Player,float Dt){Possession->Dribble(Player,Dt);}
  UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FinishedBalls;
  void PreserveFinishedBall();
- void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f); void CreateField();
+ void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f);
  bool HasBall(const AFootballPlayer* Player)const{return Possession->HasBall(Player);}
  bool HasDribbleControl(const AFootballPlayer* Player)const{return Possession->HasDribbleControl(Player);}
  bool IsRecoverableSprintTouch(const AFootballPlayer* Player,float MaxGap=ErlingPossession::RecoveryAbandonDistance)const{return Possession->IsRecoverableSprintTouch(Player,MaxGap);}
