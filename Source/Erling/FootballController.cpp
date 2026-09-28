@@ -51,6 +51,7 @@ AFootballController::AFootballController()
 	PrimaryActorTick.bTickEvenWhenPaused = true;
 	bAutoManageActiveCameraTarget = false;
 	CameraRig = CreateDefaultSubobject<UErlingCameraRig>(TEXT("CameraRig"));
+	AudioVideo = CreateDefaultSubobject<UErlingAudioVideo>(TEXT("AudioVideo"));
 }
 void AFootballController::BeginPlay()
 {
@@ -66,8 +67,7 @@ void AFootballController::BeginPlay()
 		Avatar = GetWorld()->SpawnActor<AFootballPlayer>(FVector(-350, 0, 100), FRotator::ZeroRotator);
 		Possess(Avatar);
 	}
-	for (auto N : {TEXT("goal"), TEXT("jump"), TEXT("kick"), TEXT("fail"), TEXT("click")})
-		Effects.Add(N, LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Erling/Audio/%s.%s"), N, N)));
+	AudioVideo->LoadEffects();
 	Avatar->InitializeAssets();
 	Avatar->SetActorLocation(FVector(-350, 0, 100));
 	LoadCatalog();
@@ -92,19 +92,7 @@ void AFootballController::BeginPlay()
 	ViewCamera->GetCameraComponent()->FieldOfView = 48;
 	SetViewTarget(ViewCamera);
 	ChangeScreen(EScreen::Main);
-	Music = NewObject<UAudioComponent>(this);
-	Music->bIsUISound = true;
-	Music->bAllowSpatialization = false;
-	Music->bAutoActivate = false;
-	Music->bAutoDestroy = false;
-	Music->RegisterComponent();
-	if (auto Track = LoadObject<USoundWave>(nullptr, TEXT("/Game/Erling/Audio/background.background")))
-	{
-		Track->bLooping = true;
-		Music->SetSound(Track);
-		Music->SetVolumeMultiplier(Saved->Volume);
-		Music->Play();
-	}
+	AudioVideo->StartMusic();
 	ApplyQuality();
 }
 void AFootballController::SetupInputComponent()

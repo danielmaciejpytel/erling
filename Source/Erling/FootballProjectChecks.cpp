@@ -237,9 +237,9 @@ void AFootballController::RunProjectChecks()
 			break;
 		case 18:
 			Shot(TEXT("08_Editor_Zoom"));
-			Check(TEXT("music_loaded_playing"), Music && Music->Sound && Music->IsPlaying());
+			Check(TEXT("music_loaded_playing"), AudioVideo->Music && AudioVideo->Music->Sound && AudioVideo->Music->IsPlaying());
 			UpdateMusicVolume(0);
-			Check(TEXT("music_mute"), Music && Music->VolumeMultiplier == 0);
+			Check(TEXT("music_mute"), AudioVideo->Music && AudioVideo->Music->VolumeMultiplier == 0);
 			UpdateMusicVolume(.5f);
 			Saved->Quality = 0;
 			ApplyQuality();
@@ -254,12 +254,12 @@ void AFootballController::RunProjectChecks()
 		case 21:
 			Shot(TEXT("10_Ultra"));
 			Check(TEXT("graphics_high"), UGameUserSettings::GetGameUserSettings()->GetShadowQuality() == 3);
-			Check(TEXT("music_continuity"), Music && Music->IsPlaying());
+			Check(TEXT("music_continuity"), AudioVideo->Music && AudioVideo->Music->IsPlaying());
 			break;
 		case 22:
 			ChangeScreen(EScreen::Game);
 			PauseToggle();
-			Check(TEXT("music_pause_continuity"), Music && Music->IsPlaying() && Music->bIsUISound);
+			Check(TEXT("music_pause_continuity"), AudioVideo->Music && AudioVideo->Music->IsPlaying() && AudioVideo->Music->bIsUISound);
 			break;
 		case 23:
 		{
@@ -335,15 +335,15 @@ void AFootballController::RunProjectChecks()
 			Check(TEXT("net_stops_ball"), Mode->Ball->GetComponentLocation().X < 2980 && Mode->Ball->GetComponentLocation().X > 2800 &&
 			                                  Mode->Ball->GetPhysicsLinearVelocity().Size2D() < 100);
 			Check(TEXT("net_ball_lands"), Mode->Ball->GetComponentLocation().Z < 40);
-			Check(TEXT("all_effects_loaded"), Effects.Num() == 5 && Effects.FindRef(TEXT("jump")) && Effects.FindRef(TEXT("kick")) &&
-			                                      Effects.FindRef(TEXT("fail")) && Effects.FindRef(TEXT("click")));
+			Check(TEXT("all_effects_loaded"), AudioVideo->Effects.Num() == 5 && AudioVideo->Effects.FindRef(TEXT("jump")) && AudioVideo->Effects.FindRef(TEXT("kick")) &&
+			                                      AudioVideo->Effects.FindRef(TEXT("fail")) && AudioVideo->Effects.FindRef(TEXT("click")));
 			UpdateEffectsVolume(.5f);
 			PlayEffect(TEXT("goal"), 1.5f);
 			Check(TEXT("goal_gain_150_percent"),
-			    !ActiveEffects.IsEmpty() && FMath::IsNearlyEqual(ActiveEffects.Last()->VolumeMultiplier, .75f));
+			    !AudioVideo->ActiveEffects.IsEmpty() && FMath::IsNearlyEqual(AudioVideo->ActiveEffects.Last()->VolumeMultiplier, .75f));
 			UpdateEffectsVolume(0);
-			Check(TEXT("effects_mute"), !ActiveEffects.IsEmpty() && ActiveEffects.Last()->VolumeMultiplier == 0);
-			Check(TEXT("effects_do_not_mute_music"), Music && Music->VolumeMultiplier > 0 && Music->IsPlaying());
+			Check(TEXT("effects_mute"), !AudioVideo->ActiveEffects.IsEmpty() && AudioVideo->ActiveEffects.Last()->VolumeMultiplier == 0);
+			Check(TEXT("effects_do_not_mute_music"), AudioVideo->Music && AudioVideo->Music->VolumeMultiplier > 0 && AudioVideo->Music->IsPlaying());
 			UpdateEffectsVolume(.8f);
 			SaveSettings();
 			{

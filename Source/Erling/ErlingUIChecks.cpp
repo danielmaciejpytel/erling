@@ -150,7 +150,7 @@ void UErlingInterface::RunUIChecks()
         UppercaseText();Bounds(TEXT("settings_bounds"));
         const TCHAR* Names[]={TEXT("MusicSlider"),TEXT("EffectsSlider"),TEXT("SensitivitySlider")};const float Values[]={.25f,.55f,.5f};
         for(int32 I=0;I<3;++I){auto* Slider=CastChecked<USlider>(GetWidgetFromName(Names[I]));Slider->SetValue(Values[I]);Slider->OnValueChanged.Broadcast(Values[I]);}
-        Check(TEXT("music_slider"),FMath::IsNearlyEqual(C->Saved->Volume,.25f)&&C->Music&&FMath::IsNearlyEqual(C->Music->VolumeMultiplier,.25f));
+        Check(TEXT("music_slider"),FMath::IsNearlyEqual(C->Saved->Volume,.25f)&&C->AudioVideo->Music&&FMath::IsNearlyEqual(C->AudioVideo->Music->VolumeMultiplier,.25f));
         Check(TEXT("effects_slider"),FMath::IsNearlyEqual(C->Saved->EffectsVolume,.55f));Check(TEXT("sensitivity_slider"),FMath::IsNearlyEqual(C->Saved->Sensitivity,1.65f,1.e-4f));
         Click(TEXT("LanguageButton"));Check(TEXT("english_translation"),C->Saved->Language==0&&Texts.FindRef(TEXT("PlayButtonLabel"))->GetText().ToString()==TEXT("PLAY"));Click(TEXT("LanguageButton"));
         const int32 Camera=C->Saved->CameraMode;Click(TEXT("CameraButton"));Check(TEXT("camera_cycle"),C->Saved->CameraMode==(Camera+1)%3);C->Saved->CameraMode=Camera;C->Saved->ReducedMotion=Camera==1;
