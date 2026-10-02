@@ -262,6 +262,12 @@ void AFootballController::RunChecks()
     static float TurnBegin=0,TurnReverseTime=-1,TurnMaxSide=0,TurnFreeSide=0,TurnFreeMinX=MAX_flt;
     static bool TurnAcquired=false;
     static float TurnNextFrame=0;static int32 TurnFrame=0;
+    // Gamepad steering poses: camera mode, camera yaw and the held stick (Forward/Right axis values).
+    static const int32 GamepadMoveCameraModes[]={0,0,0,2};
+    static const float GamepadMoveYaws[]={0.f,120.f,180.f,0.f},GamepadMoveForward[]={1.f,0.f,0.f,1.f},GamepadMoveRight[]={0.f,1.f,-1.f,0.f};
+    static const TCHAR* GamepadMoveNames[]={TEXT("yaw_0"),TEXT("yaw_120"),TEXT("yaw_180"),TEXT("pitch")};
+    static int32 GamepadMoveRestoreCameraMode=0;
+    static float GamepadMoveRestoreYaw=0.f,GamepadMoveFullSpeed=0.f,GamepadMoveFullIntent=0.f;
     if((TestStage_Latest==165||TestStage_Latest==167||TestStage_Latest==169)&&Avatar)
     {
         Forward(TestStage_Latest==165?0:-1);Right(TestStage_Latest==165?1:0);
@@ -437,7 +443,14 @@ void AFootballController::RunChecks()
     if(TestStage_Latest==171)Forward(1);
     if(TestStage_Latest==172){Forward(0);Right(1);}
     if(TestStage_Latest==173){Forward(-1);Right(0);}
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
+    if(TestStage_Latest>=180&&TestStage_Latest<=187&&Saved)
+    {
+        // A held stick: InputKey has marked the pad active and the engine re-sends both axes every frame.
+        const int32 Pose=(TestStage_Latest-180)/2;const float Scale=(TestStage_Latest-180)%2?.5f:1.f;
+        bUsingGamepadInput=true;TestDigitalMoveIntent=false;Saved->CameraMode=GamepadMoveCameraModes[Pose];Yaw=GamepadMoveYaws[Pose];
+        Forward(GamepadMoveForward[Pose]*Scale);Right(GamepadMoveRight[Pose]*Scale);
+    }
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -1281,6 +1294,48 @@ void AFootballController::RunChecks()
         for(int32 I=0;I<240;I++)CameraRig->UpdatePitchViewCenter(1.f/60,Moved);
         Check(TEXT("pitch_anchor_return_reaches_current_player"),CameraRig->PitchViewCenter.Equals(Moved,.1f));
         Mode->ResetBall();CameraRig->PitchViewInitialized=false;Wait=.1f;break;
+    }
+    case 179:case 180:case 181:case 182:case 183:case 184:case 185:case 186:case 187:
+    {
+        // Full and half gamepad stick under several camera yaws and the pitch camera: the observed velocity must
+        // follow GetMoveIntentWorld() (read by dribble/facing/aim), never a doubled or camera-rotated copy of it.
+        if(TestStage_Latest==179){GamepadMoveRestoreCameraMode=Saved->CameraMode;GamepadMoveRestoreYaw=Yaw;ChangeScreen(EScreen::Game);}
+        else
+        {
+            const int32 Case=TestStage_Latest-180,Pose=Case/2;const bool Half=Case%2==1;
+            FVector Velocity=Avatar->GetVelocity();Velocity.Z=0;const FVector Intent=GetMoveIntentWorld();
+            const float Dot=FVector::DotProduct(Velocity.GetSafeNormal2D(),Intent.GetSafeNormal2D());
+            const float Angle=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot,-1.f,1.f)));
+            UE_LOG(LogTemp,Display,TEXT("GAMEPAD_MOVE pose=%s scale=%.1f camera=%d yaw=%f intent=%s velocity=%s angle=%f"),GamepadMoveNames[Pose],Half?.5f:1.f,Saved->CameraMode,Yaw,*Intent.ToString(),*Velocity.ToString(),Angle);
+            Check(*FString::Printf(TEXT("gamepad_move_matches_intent_%s_%s"),GamepadMoveNames[Pose],Half?TEXT("half"):TEXT("full")),!Intent.IsNearlyZero()&&Velocity.Size2D()>1.f&&Angle<5.f);
+            if(!Half){GamepadMoveFullSpeed=Velocity.Size2D();GamepadMoveFullIntent=Intent.Size2D();}
+            else
+            {
+                // Free ball, no skid: UErlingMovement::CalcVelocity defers to Super, which caps speed at
+                // MaxWalkSpeed*AnalogInputModifier, so the settled speed ratio equals the intent ratio (.5).
+                // The band only absorbs sampling jitter; a doubled input saturates near 1, a cancelled one gives 0.
+                const float Ratio=GamepadMoveFullSpeed>1.f?Velocity.Size2D()/GamepadMoveFullSpeed:0.f;
+                const float Expected=GamepadMoveFullIntent>KINDA_SMALL_NUMBER?Intent.Size2D()/GamepadMoveFullIntent:0.f;
+                UE_LOG(LogTemp,Display,TEXT("GAMEPAD_MOVE_SPEED pose=%s full=%f half=%f ratio=%f expected=%f"),GamepadMoveNames[Pose],GamepadMoveFullSpeed,Velocity.Size2D(),Ratio,Expected);
+                Check(*FString::Printf(TEXT("gamepad_move_matches_intent_%s_half_speed"),GamepadMoveNames[Pose]),Expected>0.f&&FMath::Abs(Ratio-Expected)<.15f);
+            }
+        }
+        if(TestStage_Latest<187)
+        {
+            const int32 Case=TestStage_Latest-179,Pose=Case/2;const float Scale=Case%2?.5f:1.f;
+            ResetPlayer();Avatar->ConsumeMovementInputVector();SprintOff();Mode->ResetBall();
+            Mode->Ball->SetWorldLocation(FVector(1500,1000,22),false,nullptr,ETeleportType::TeleportPhysics);
+            {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->LastMoveInputDirection=FVector::ZeroVector;Move->TurnSkidRemaining=0;}
+            MoveForward=0;MoveRight=0;SmoothedGamepadMoveInput=FVector::ZeroVector;bUsingGamepadInput=true;TestDigitalMoveIntent=false;
+            Saved->CameraMode=GamepadMoveCameraModes[Pose];Yaw=GamepadMoveYaws[Pose];
+            Forward(GamepadMoveForward[Pose]*Scale);Right(GamepadMoveRight[Pose]*Scale);Wait=.8f;
+        }
+        else
+        {
+            MoveForward=0;MoveRight=0;SmoothedGamepadMoveInput=FVector::ZeroVector;bUsingGamepadInput=false;
+            Saved->CameraMode=GamepadMoveRestoreCameraMode;Yaw=GamepadMoveRestoreYaw;ResetPlayer();Avatar->ConsumeMovementInputVector();Wait=.1f;
+        }
+        break;
     }
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
