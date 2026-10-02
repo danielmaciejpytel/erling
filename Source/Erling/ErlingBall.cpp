@@ -24,7 +24,8 @@ void AErlingBall::ConfigureLiveBall()
 	Ball->SetMassOverrideInKg(NAME_None, ErlingBall::MassKg);
 	Ball->SetLinearDamping(ErlingBall::LinearDamping);
 	Ball->SetAngularDamping(ErlingBall::AngularDamping);
-	Ball->BodyInstance.bUseCCD = true;
+	// SetUseCCD forwards the flag to the Chaos particle; a plain field write after SetSimulatePhysics never reaches it.
+	Ball->BodyInstance.SetUseCCD(true);
 	Ball->SetNotifyRigidBodyCollision(true);
 	Ball->OnComponentHit.AddDynamic(this, &AErlingBall::NetHit);
 	if (auto M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Erling/Materials/M_Ball.M_Ball")))
@@ -67,7 +68,7 @@ UStaticMeshComponent* AErlingBall::SpawnFinishedCopy()
 	Fresh->SetSimulatePhysics(true);
 	Fresh->SetMassOverrideInKg(NAME_None, ErlingBall::MassKg);
 	Fresh->SetAngularDamping(ErlingBall::AngularDamping);
-	Fresh->BodyInstance.bUseCCD = true;
+	Fresh->BodyInstance.SetUseCCD(true);
 	Fresh->SetPhysMaterialOverride(Old->BodyInstance.GetSimplePhysicalMaterial());
 	Fresh->SetRenderCustomDepth(Old->bRenderCustomDepth);
 	Fresh->SetCustomDepthStencilValue(Old->CustomDepthStencilValue);

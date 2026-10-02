@@ -268,6 +268,7 @@ void AFootballPlayer::StartPhysicalJump()
 {
 	if (!CanAct())
 		return;
+	CancelBallTrap();
 	TurningInPlace = false;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	const auto* PC = Cast<AFootballController>(GetController());
@@ -287,6 +288,7 @@ void AFootballPlayer::BeginTurn(float TargetYaw)
 {
 	if (!CanAct() || TurningInPlace || GetVelocity().Size2D() > 15)
 		return;
+	CancelBallTrap();
 	TurningInPlace = true;
 	TurnElapsed = 0;
 	TurnStartYaw = GetActorRotation().Yaw;
