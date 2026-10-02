@@ -45,9 +45,15 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "ErlingProfile.h"
+#include "ErlingTestExit.h"
 #if !UE_BUILD_SHIPPING
 void AFootballController::RunProjectChecks()
 {
+	// Arm the stale-report cleanup and watchdog before any early return of this suite.
+	static ErlingTestRun::FState ProjectRun;
+	ErlingTestRun::Begin(ProjectRun, TEXT("project"), FPaths::ProjectSavedDir() / TEXT("runtime_checks.txt"));
+	if (ErlingTestRun::Watchdog(ProjectRun, TEXT("ERLING_PROJECT_CHECKS_COMPLETE"), TestReport))
+		return;
 	static bool DemoReturned = false, DemoShotFacedGoal = false;
 	if (TestStage == 27 || TestStage == 28)
 	{
@@ -357,8 +363,7 @@ void AFootballController::RunProjectChecks()
 			Shot(TEXT("14_Settings_Effects"));
 			break;
 		default:
-			FFileHelper::SaveStringToFile(TestReport, *(FPaths::ProjectSavedDir() / TEXT("runtime_checks.txt")));
-			FPlatformMisc::RequestExit(false);
+			ErlingTestRun::Finish(ProjectRun, TEXT("ERLING_PROJECT_CHECKS_COMPLETE"), TestReport, TestReport.Contains(TEXT(": FAIL")));
 			break;
 	}
 	TestStage++;

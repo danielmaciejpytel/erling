@@ -5,6 +5,7 @@
 #include "ErlingProfile.h"
 #include "ErlingInterface.h"
 #include "ErlingShot.h"
+#include "ErlingTestExit.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/MorphTarget.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -33,6 +34,10 @@ void AFootballController::RunChecks()
         static double StageStarted=0.0;
         static FQuat BunNeutral=FQuat::Identity,RubberNeutral=FQuat::Identity;
         static float MaxBunMotion=0.f,MaxRubberMotion=0.f;
+        static ErlingTestRun::FState BunRubberRun;
+        static bool BunRubberKitApplied=false;
+        ErlingTestRun::Begin(BunRubberRun,TEXT("bun_rubber"),FPaths::ProjectSavedDir()/TEXT("bun_rubber_runtime_checks.txt"));
+        if(ErlingTestRun::Watchdog(BunRubberRun,TEXT("ERLING_BUNRUBBER_CHECKS_COMPLETE"),Report))return;
         auto CheckMotion=[this](const TCHAR* Label,bool Passed)
         {
             const FString Line=FString::Printf(TEXT("%s: %s\n"),Label,Passed?TEXT("PASS"):TEXT("FAIL"));
@@ -40,9 +45,14 @@ void AFootballController::RunChecks()
         };
         auto Finish=[this]()
         {
-            FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("bun_rubber_runtime_checks.txt")));
-            FPlatformMisc::RequestExit(false);
+            ErlingTestRun::Finish(BunRubberRun,TEXT("ERLING_BUNRUBBER_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));
         };
+        // The test needs SK_bun/SK_rubber: select the Ponytail hairstyle explicitly instead of trusting the saved profile.
+        if(!BunRubberKitApplied&&Avatar)
+        {
+            Selection={1,0,1,1,1};if(Saved)Saved->Appearance=Selection;
+            Avatar->ApplyKit(Selection,Catalog);BunRubberKitApplied=true;return;
+        }
         USkeletalMeshComponent* Bun=nullptr;
         USkeletalMeshComponent* Rubber=nullptr;
         if(Avatar)for(USkeletalMeshComponent* Piece:Avatar->Pieces)
@@ -115,6 +125,9 @@ void AFootballController::RunChecks()
     {
         static int32 ShotStage=0;
         static double ShotCheckAt=0;
+        static ErlingTestRun::FState ShotsRun;
+        ErlingTestRun::Begin(ShotsRun,TEXT("shots"),FPaths::ProjectSavedDir()/TEXT("runtime_checks_Shots.txt"));
+        if(ErlingTestRun::Watchdog(ShotsRun,TEXT("ERLING_SHOT_CHECKS_COMPLETE"),Report))return;
         if(ShotCheckAt==0){ShotCheckAt=Now+3;return;}
         if(Now<ShotCheckAt)return;
         auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
@@ -218,12 +231,14 @@ void AFootballController::RunChecks()
         else
         {
             const bool Failed=Report.Contains(TEXT("FAIL"));
-            FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Shots.txt")));
-            UE_LOG(LogTemp,Display,TEXT("ERLING_SHOT_CHECKS_COMPLETE: %s"),Failed?TEXT("FAIL"):TEXT("PASS"));
-            FPlatformMisc::RequestExitWithStatus(false,Failed?1:0);return;
+            ErlingTestRun::Finish(ShotsRun,TEXT("ERLING_SHOT_CHECKS_COMPLETE"),Report,Failed);return;
         }
         ++ShotStage;ShotCheckAt=Now+((ShotStage==4||ShotStage==7)?1.3f:.1f);return;
     }
+    // Default -ErlingTest_Latest suite (including the *Only start-stage modes): watchdog runs before any early return.
+    static ErlingTestRun::FState LatestRun;
+    ErlingTestRun::Begin(LatestRun,TEXT("latest"),FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt"));
+    if(ErlingTestRun::Watchdog(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report))return;
     static TArray<TWeakObjectPtr<AActor>> EvictedFinishedBalls;
     static bool JumpModelVisible=true,DemoTwoSteps=true,DemoContinuous=true,DemoVariedShotDistance=true,DemoShotRangeOk=true,DemoNoPostShotGlide=true;
     static float BallControlDribbleDistance=0.f,RunDribbleDistance=0.f,LastDemoShotAbsX=-1.f;
@@ -1429,8 +1444,7 @@ void AFootballController::RunChecks()
         Check(TEXT("turn_never_resumes_trap_gesture_after_turning"),!TrapCancelResumed&&!Avatar->BallTrapActive&&!Avatar->TurningInPlace);
         Avatar->CancelBallTrap();ResetPlayer();Wait=.1f;break;
     default:
-        FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
-        FPlatformMisc::RequestExit(false);return;
+        ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;
     }
     TestStage_Latest++;TestAt=Now+Wait;
 }
