@@ -160,62 +160,42 @@ public:
         const FLinearColor Rose=FLinearColor::FromSRGBColor(FColor(218,91,145));
         const FString FontPackage=TEXT("/Game/Erling/UI/Fonts/F_Storybook");
         auto* Font=FPackageName::DoesPackageExist(FontPackage)?LoadObject<UFont>(nullptr,*(FontPackage+TEXT(".F_Storybook"))):nullptr;
-        // Keep the established UMG font asset, but refresh its embedded face so
-        // every existing widget picks up the selected menu typeface in place.
+        // Keep the established UMG font asset, but refresh its embedded faces so every
+        // existing widget picks up the Dantes Toon menu typeface in place.
         {
-            TArray<uint8> Bytes;
-            const FString Filename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_CorsairPE-Rg.otf");
-            if(!FFileHelper::LoadFileToArray(Bytes,*Filename)) return false;
-            auto* Face=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_CorsairPE.FF_CorsairPE"));
-            const bool bNewFace=!Face;
-            if(!Face) Face=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_CorsairPE")),TEXT("FF_CorsairPE"),RF_Public|RF_Standalone);
-            if(bNewFace) Face->InitializeFromBulkData(Filename,EFontHinting::Default,Bytes.GetData(),Bytes.Num());
-            Face->SourceFilename=Filename;
-            Face->LoadingPolicy=EFontLoadingPolicy::Inline;
-            TArray<uint8> FallbackBytes;
-            const FString FallbackFilename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_Brother.otf");
-            if(!FFileHelper::LoadFileToArray(FallbackBytes,*FallbackFilename)) return false;
-            auto* FallbackFace=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_BrotherDemo.FF_BrotherDemo"));
-            const bool bNewFallbackFace=!FallbackFace;
-            if(!FallbackFace) FallbackFace=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_BrotherDemo")),TEXT("FF_BrotherDemo"),RF_Public|RF_Standalone);
-            if(bNewFallbackFace) FallbackFace->InitializeFromBulkData(FallbackFilename,EFontHinting::Default,FallbackBytes.GetData(),FallbackBytes.Num());
-            FallbackFace->SourceFilename=FallbackFilename;
-            FallbackFace->LoadingPolicy=EFontLoadingPolicy::Inline;
-            TArray<uint8> QBytes;
-            const FString QFilename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts/FF_Brother-QBaseline.otf");
-            if(!FFileHelper::LoadFileToArray(QBytes,*QFilename)) return false;
-            auto* QFace=LoadObject<UFontFace>(nullptr,TEXT("/Game/Erling/UI/Fonts/FF_BrotherQBaseline.FF_BrotherQBaseline"));
-            const bool bNewQFace=!QFace;
-            if(!QFace) QFace=NewObject<UFontFace>(CreatePackage(TEXT("/Game/Erling/UI/Fonts/FF_BrotherQBaseline")),TEXT("FF_BrotherQBaseline"),RF_Public|RF_Standalone);
-            if(bNewQFace) QFace->InitializeFromBulkData(QFilename,EFontHinting::Default,QBytes.GetData(),QBytes.Num());
-            QFace->SourceFilename=QFilename;
-            QFace->LoadingPolicy=EFontLoadingPolicy::Inline;
+            auto LoadFace=[&](const TCHAR* AssetName,const TCHAR* SourceFile,bool& bNew)->UFontFace*
+            {
+                TArray<uint8> Bytes;
+                const FString Filename=FPaths::ProjectContentDir()/TEXT("Erling/UI/SourceArt/Fonts")/SourceFile;
+                if(!FFileHelper::LoadFileToArray(Bytes,*Filename)) return nullptr;
+                const FString Package=FString(TEXT("/Game/Erling/UI/Fonts/"))+AssetName;
+                auto* Face=LoadObject<UFontFace>(nullptr,*(Package+TEXT(".")+AssetName));
+                bNew=!Face;
+                if(!Face) Face=NewObject<UFontFace>(CreatePackage(*Package),AssetName,RF_Public|RF_Standalone);
+                if(bNew) Face->InitializeFromBulkData(Filename,EFontHinting::Default,Bytes.GetData(),Bytes.Num());
+                Face->SourceFilename=Filename;
+                Face->LoadingPolicy=EFontLoadingPolicy::Inline;
+                return Face;
+            };
+            bool bNewRegular=false,bNewBold=false;
+            auto* Regular=LoadFace(TEXT("FF_DantesToonRegular"),TEXT("DantesToon-Regular.ttf"),bNewRegular);
+            auto* Bold=LoadFace(TEXT("FF_DantesToonBold"),TEXT("DantesToon-Bold.ttf"),bNewBold);
+            if(!Regular||!Bold) return false;
             const bool bNewFont=!Font;
             if(!Font) Font=NewObject<UFont>(CreatePackage(*FontPackage),TEXT("F_Storybook"),RF_Public|RF_Standalone);
             Font->FontCacheType=EFontCacheType::Runtime;
-            FTypefaceEntry Entry(TEXT("Regular")); Entry.Font=FFontData(Face);
-            Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.Reset();
-            Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.Add(Entry);
-            // Brother DEMO is consulted only if Corsair PE cannot supply a glyph.
-            FTypefaceEntry FallbackEntry(TEXT("Regular"));FallbackEntry.Font=FFontData(FallbackFace);
-            auto& Fallback=Font->GetMutableInternalCompositeFont().FallbackTypeface.Typeface;
-            Fallback.Fonts.Reset();Fallback.Fonts.Add(FallbackEntry);
-            // Use a dedicated Brother face with its Q aligned to Corsair's cap line.
-            auto& SubTypefaces=Font->GetMutableInternalCompositeFont().SubTypefaces;
-            SubTypefaces.Reset();
-            FCompositeSubFont CapitalQ;
-            FTypefaceEntry QEntry(TEXT("Regular"));QEntry.Font=FFontData(QFace);
-            CapitalQ.Typeface.Fonts.Add(QEntry);
-            CapitalQ.CharacterRanges.Emplace(0x0051);
-            // Keep its rendered height matched after repositioning the glyph outline.
-            CapitalQ.ScalingFactor=0.97f;
-#if WITH_EDITORONLY_DATA
-            CapitalQ.EditorName=TEXT("Brother DEMO - capital Q");
-#endif
-            SubTypefaces.Add(MoveTemp(CapitalQ));
-            for(UObject* Asset:TArray<UObject*>{Face,FallbackFace,QFace,Font})
+            auto& Composite=Font->GetMutableInternalCompositeFont();
+            FTypefaceEntry RegularEntry(TEXT("Regular"));RegularEntry.Font=FFontData(Regular);
+            FTypefaceEntry BoldEntry(TEXT("Bold"));BoldEntry.Font=FFontData(Bold);
+            Composite.DefaultTypeface.Fonts.Reset();
+            Composite.DefaultTypeface.Fonts.Add(RegularEntry);
+            Composite.DefaultTypeface.Fonts.Add(BoldEntry);
+            // Dantes Toon has every glyph the interface uses, so no fallback or per-character sub-typeface remains.
+            Composite.FallbackTypeface.Typeface.Fonts.Reset();
+            Composite.SubTypefaces.Reset();
+            for(UObject* Asset:TArray<UObject*>{Regular,Bold,Font})
             {
-                if((Asset==Face&&bNewFace)||(Asset==FallbackFace&&bNewFallbackFace)||(Asset==QFace&&bNewQFace)||(Asset==Font&&bNewFont)) FAssetRegistryModule::AssetCreated(Asset); Asset->MarkPackageDirty();
+                if((Asset==Regular&&bNewRegular)||(Asset==Bold&&bNewBold)||(Asset==Font&&bNewFont)) FAssetRegistryModule::AssetCreated(Asset); Asset->MarkPackageDirty();
                 FSavePackageArgs Save;Save.TopLevelFlags=RF_Public|RF_Standalone;Save.SaveFlags=SAVE_NoError;
                 if(!UPackage::SavePackage(Asset->GetOutermost(),Asset,*FPackageName::LongPackageNameToFilename(Asset->GetOutermost()->GetName(),FPackageName::GetAssetPackageExtension()),Save)) return false;
             }
@@ -276,7 +256,7 @@ public:
                             {
                                 FVector2D Position=TextSlot->GetPosition();
                                 Position.Y=(ButtonHeight-TextSlot->GetSize().Y)*.5f;
-                                // Text geometry can be centered while Corsair's visible glyphs still sit low.
+                                // Text geometry can be centered while the visible glyphs still sit low or high.
                                 // Tune the few button families against rendered screenshots at design resolution.
                                 const FName ButtonName=B->GetFName();
                                 const FName TextName=Child->GetFName();
