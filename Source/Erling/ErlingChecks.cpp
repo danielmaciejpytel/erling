@@ -1,6 +1,7 @@
 #include "Football.h"
 #include "ErlingAnimation.h"
 #include "ErlingTuning.h"
+#include "ErlingProfile.h"
 #include "ErlingInterface.h"
 #include "ErlingShot.h"
 #include "Animation/AnimSequence.h"
@@ -268,6 +269,10 @@ void AFootballController::RunChecks()
     static const TCHAR* GamepadMoveNames[]={TEXT("yaw_0"),TEXT("yaw_120"),TEXT("yaw_180"),TEXT("pitch")};
     static int32 GamepadMoveRestoreCameraMode=0;
     static float GamepadMoveRestoreYaw=0.f,GamepadMoveFullSpeed=0.f,GamepadMoveFullIntent=0.f;
+    // Leaving Settings without "Save and return": values captured before the check and written back after it.
+    static float SettingsLeaveVolume=0.f,SettingsLeaveEffects=0.f,SettingsLeaveSensitivity=0.f;
+    static int32 SettingsLeaveCamera=0,SettingsLeaveQuality=0;
+    static bool SettingsLeaveTestSlot=false;
     if((TestStage_Latest==165||TestStage_Latest==167||TestStage_Latest==169)&&Avatar)
     {
         Forward(TestStage_Latest==165?0:-1);Right(TestStage_Latest==165?1:0);
@@ -1336,6 +1341,43 @@ void AFootballController::RunChecks()
             Saved->CameraMode=GamepadMoveRestoreCameraMode;Yaw=GamepadMoveRestoreYaw;ResetPlayer();Avatar->ConsumeMovementInputVector();Wait=.1f;
         }
         break;
+    }
+    case 188:case 189:
+    {
+        // Esc/B/Start (PauseToggle) out of Settings must persist slider/camera/quality changes without "Save and return".
+        // A baseline of different values is written first and the slot is read back from disk after leaving, so a
+        // change that only lives in the in-memory Saved object reads back as the stale baseline and fails.
+        const bool ToPause=TestStage_Latest==189;
+        if(TestStage_Latest==188)
+        {
+            SettingsLeaveVolume=Saved->Volume;SettingsLeaveEffects=Saved->EffectsVolume;SettingsLeaveSensitivity=Saved->Sensitivity;
+            SettingsLeaveCamera=Saved->CameraMode;SettingsLeaveQuality=Saved->Quality;
+            SettingsLeaveTestSlot=FCString::Strcmp(ProfileSlot(),TEXT("ErlingProfile_Test"))==0;
+            Check(TEXT("settings_leave_uses_test_slot"),SettingsLeaveTestSlot);
+        }
+        if(SettingsLeaveTestSlot)
+        {
+            Saved->Volume=.11f;Saved->EffectsVolume=.22f;Saved->Sensitivity=.8f;Saved->CameraMode=0;Saved->Quality=1;
+            UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);
+            Saved->Volume=.33f;Saved->EffectsVolume=.55f;Saved->Sensitivity=1.4f;Saved->CameraMode=2;Saved->Quality=3;
+            if(ToPause)ChangeScreen(EScreen::Pause);
+            SettingsReturn=ToPause?EScreen::Pause:EScreen::Main;ChangeScreen(EScreen::Settings);
+            Check(ToPause?TEXT("settings_leave_pause_entered_settings"):TEXT("settings_leave_main_entered_settings"),Screen==EScreen::Settings);
+            PauseToggle();
+            Check(ToPause?TEXT("settings_leave_returns_to_pause"):TEXT("settings_leave_returns_to_main"),Screen==SettingsReturn);
+            const auto Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(ProfileSlot(),0));
+            UE_LOG(LogTemp,Display,TEXT("SETTINGS_LEAVE to=%s loaded=%d volume=%f effects=%f sensitivity=%f camera=%d quality=%d"),ToPause?TEXT("pause"):TEXT("main"),Loaded?1:0,Loaded?Loaded->Volume:-1.f,Loaded?Loaded->EffectsVolume:-1.f,Loaded?Loaded->Sensitivity:-1.f,Loaded?Loaded->CameraMode:-99,Loaded?Loaded->Quality:-99);
+            Check(ToPause?TEXT("settings_saved_on_leave_to_pause"):TEXT("settings_saved_on_leave_via_escape"),Loaded&&FMath::IsNearlyEqual(Loaded->Volume,.33f,1.e-4f)&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.55f,1.e-4f)&&FMath::IsNearlyEqual(Loaded->Sensitivity,1.4f,1.e-4f)&&Loaded->CameraMode==2&&Loaded->Quality==3);
+        }
+        if(ToPause)
+        {
+            Saved->Volume=SettingsLeaveVolume;Saved->EffectsVolume=SettingsLeaveEffects;Saved->Sensitivity=SettingsLeaveSensitivity;
+            Saved->CameraMode=SettingsLeaveCamera;Saved->Quality=SettingsLeaveQuality;
+            if(SettingsLeaveTestSlot)UGameplayStatics::SaveGameToSlot(Saved,ProfileSlot(),0);
+            SettingsReturn=EScreen::Main;ChangeScreen(EScreen::Game);ResetPlayer();
+        }
+        else if(SettingsLeaveTestSlot)ChangeScreen(EScreen::Game);
+        Wait=.1f;break;
     }
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));

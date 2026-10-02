@@ -91,6 +91,8 @@ void AFootballController::ChangeScreen(EScreen Next)
 {
 	const auto Old = Screen;
 	const bool ResumeFromSettings = Old == EScreen::Settings && Next == SettingsReturn;
+	if (Old == EScreen::Settings && Next != EScreen::Settings)
+		SaveSettings();
 	BallControlOff();
 	if (Avatar)
 	{
@@ -197,10 +199,12 @@ void AFootballController::BackFromEditor()
 }
 void AFootballController::SaveSettings()
 {
-	UGameplayStatics::SaveGameToSlot(Saved, ProfileSlot(), 0);
+	if (Saved)
+		UGameplayStatics::SaveGameToSlot(Saved, ProfileSlot(), 0);
 }
 void AFootballController::Quit()
 {
+	SaveSettings();
 	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 FString AFootballController::Localize(const TCHAR* English, const TCHAR* Polish) const
