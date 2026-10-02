@@ -60,6 +60,15 @@ void AFootballController::BeginPlay()
 	// Parse the opt-in test switches once instead of on every Tick.
 	bRunLatestChecks = FParse::Param(FCommandLine::Get(), TEXT("ErlingTest_Latest"));
 	bRunProjectChecks = FParse::Param(FCommandLine::Get(), TEXT("ErlingTest"));
+	// Test runs start from a default UFootballSave: drop the disposable test slot once per process.
+	// Guarded by name so the player's ErlingProfile slot can never be deleted here.
+	static bool bTestSlotReset = false;
+	if (!bTestSlotReset && FCString::Strcmp(ProfileSlot(), TEXT("ErlingProfile_Test")) == 0)
+	{
+		bTestSlotReset = true;
+		if (UGameplayStatics::DoesSaveGameExist(ProfileSlot(), 0))
+			UGameplayStatics::DeleteGameInSlot(ProfileSlot(), 0);
+	}
 #endif
 	Avatar = Cast<AFootballPlayer>(GetPawn());
 	if (!Avatar)

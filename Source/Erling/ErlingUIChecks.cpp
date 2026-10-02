@@ -21,6 +21,7 @@
 #include "Widgets/SWindow.h"
 #include "Input/HittestGrid.h"
 #include "Layout/WidgetPath.h"
+#include "ErlingTestExit.h"
 
 // Opt-in end-to-end checks run against ErlingProfile_Test, never the player's save.
 void UErlingInterface::RunUIChecks()
@@ -58,13 +59,18 @@ void UErlingInterface::RunUIChecks()
         return;
     }
     if(!FParse::Param(FCommandLine::Get(),TEXT("ErlingUITest"))) return;
+    FString Directory=FPaths::ProjectSavedDir()/TEXT("UIChecks");
+    FParse::Value(FCommandLine::Get(),TEXT("ErlingUIReport="),Directory);
+    // Arm the stale-report cleanup and watchdog before any early return of this suite.
+    static ErlingTestRun::FState UIRun;
+    if(!UIRun.bStarted)IFileManager::Get().MakeDirectory(*Directory,true);
+    ErlingTestRun::Begin(UIRun,TEXT("ui"),Directory/TEXT("checks.txt"));
+    if(ErlingTestRun::Watchdog(UIRun,TEXT("ERLING_UI_CHECKS_COMPLETE"),CheckReport))return;
     const double Now=FPlatformTime::Seconds();
     if(NextCheck==0) { NextCheck=Now+6;return; }
     if(Now<NextCheck) return;
     auto* C=Controller.Get();
     if(!C || !C->Saved) return;
-    FString Directory=FPaths::ProjectSavedDir()/TEXT("UIChecks");
-    FParse::Value(FCommandLine::Get(),TEXT("ErlingUIReport="),Directory);
     IFileManager::Get().MakeDirectory(*Directory,true);
     auto Check=[this](const TCHAR* Name,bool Passed){CheckReport+=FString::Printf(TEXT("%s %s\n"),Passed?TEXT("PASS"):TEXT("FAIL"),Name);CheckFailed|=!Passed;UE_LOG(LogTemp,Display,TEXT("ERLING_UI_CHECK %s %s"),Passed?TEXT("PASS"):TEXT("FAIL"),Name);};
     auto Click=[this,&Check](FName Name){auto* B=Cast<UErlingUIButton>(GetWidgetFromName(Name));Check(*FString::Printf(TEXT("button_%s"),*Name.ToString()),B&&B->OnClicked.IsBound());if(B)B->OnClicked.Broadcast();};
@@ -126,8 +132,9 @@ void UErlingInterface::RunUIChecks()
     case 0:{int32 Width=1920,Height=1080;FParse::Value(FCommandLine::Get(),TEXT("ResX="),Width);FParse::Value(FCommandLine::Get(),TEXT("ResY="),Height);C->ConsoleCommand(FString::Printf(TEXT("r.SetRes %dx%dw"),Width,Height));}C->Saved->Language=1;C->Saved->PauseInSettings=false;C->Saved->Appearance={1,0,1,1,1};C->Selection=C->Saved->Appearance;C->Avatar->ApplyKit(C->Selection,C->Catalog);C->ChangeScreen(S::Main);RefreshScreen();Check(TEXT("designer_blueprint"),GetClass()->GetPathName().Contains(TEXT("WBP_ErlingInterface_C")));Check(TEXT("six_pages"),ScreenSwitcher&&ScreenSwitcher->GetNumWidgets()==6);break;
     case 1:
     {
-        UppercaseText();Bounds(TEXT("main_bounds"));Check(TEXT("main_keyboard_focus"),GetWidgetFromName(TEXT("PlayButton"))->HasAnyUserFocus());
-        auto* Panel=CastChecked<UCanvasPanel>(GetWidgetFromName(TEXT("MainPanel")));
+        UppercaseText();Bounds(TEXT("main_bounds"));{UWidget* Play=GetWidgetFromName(TEXT("PlayButton"));Check(TEXT("main_keyboard_focus"),Play&&Play->HasAnyUserFocus());}
+        auto* Panel=Cast<UCanvasPanel>(GetWidgetFromName(TEXT("MainPanel")));
+        if(!Panel){Check(TEXT("main_buttons_inside_panel"),false);Check(TEXT("main_backplate_matches_panel"),false);Shot(TEXT("01_Main_PL"));break;}
         const auto G=Panel->GetCachedGeometry();bool Inside=true;
         for(UWidget* Child:Panel->GetAllChildren()) if(Cast<UErlingUIButton>(Child))
         {
@@ -137,33 +144,33 @@ void UErlingInterface::RunUIChecks()
             Inside&=A.X>=0&&A.Y>=0&&Z.X<=G.GetLocalSize().X&&Z.Y<=G.GetLocalSize().Y;
         }
         Check(TEXT("main_buttons_inside_panel"),Inside);
-        Check(TEXT("main_backplate_matches_panel"),Panel->GetChildAt(0)->GetCachedGeometry().GetLocalSize().Equals(G.GetLocalSize(),1));
+        Check(TEXT("main_backplate_matches_panel"),Panel->GetChildAt(0)&&Panel->GetChildAt(0)->GetCachedGeometry().GetLocalSize().Equals(G.GetLocalSize(),1));
         Shot(TEXT("01_Main_PL"));break;
     }
     case 2:MouseClick(TEXT("CharacterButton"));CheckAppearance=C->Selection;break;
     case 3:Check(TEXT("mouse_opens_character_screen"),C->Screen==S::Editor);Bounds(TEXT("character_bounds"));Shot(TEXT("02_Character_PL"));break;
     case 4:for(int32 I=0;I<C->Catalog.Num();++I){const int32 Old=C->Selection[I];Click(*FString::Printf(TEXT("AppearanceNext%d"),I));Check(*FString::Printf(TEXT("category_%d_next"),I),C->Selection[I]==(Old+1)%C->Catalog[I].Options.Num());Click(*FString::Printf(TEXT("AppearancePrevious%d"),I));Check(*FString::Printf(TEXT("category_%d_previous"),I),C->Selection[I]==Old);}Click(TEXT("PreviewNext"));Check(TEXT("preview_animation"),C->PreviewIndex>=0&&C->Avatar->PreviewAnimation);Click(TEXT("AppearanceNext2"));Click(TEXT("CharacterBackButton"));Check(TEXT("cancel_draft"),C->Screen==S::Main&&C->Selection==CheckAppearance);break;
-    case 5:GetWidgetFromName(TEXT("CharacterButton"))->SetUserFocus(C);Key(EKeys::Gamepad_FaceButton_Bottom);Check(TEXT("gamepad_opens_character_screen"),C->Screen==S::Editor);Click(TEXT("AppearanceNext0"));Click(TEXT("SaveAppearanceButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("appearance_saved"),Loaded&&Loaded->Appearance==C->Selection);}break;
+    case 5:if(UWidget* Character=GetWidgetFromName(TEXT("CharacterButton")))Character->SetUserFocus(C);else Check(TEXT("button_CharacterButton"),false);Key(EKeys::Gamepad_FaceButton_Bottom);Check(TEXT("gamepad_opens_character_screen"),C->Screen==S::Editor);Click(TEXT("AppearanceNext0"));Click(TEXT("SaveAppearanceButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("appearance_saved"),Loaded&&Loaded->Appearance==C->Selection);}break;
     case 6:Shot(TEXT("03_Appearance_Saved"));break;
     case 7:Click(TEXT("CharacterBackButton"));Click(TEXT("SettingsButton"));break;
     case 8:{
         UppercaseText();Bounds(TEXT("settings_bounds"));
         const TCHAR* Names[]={TEXT("MusicSlider"),TEXT("EffectsSlider"),TEXT("SensitivitySlider")};const float Values[]={.25f,.55f,.5f};
-        for(int32 I=0;I<3;++I){auto* Slider=CastChecked<USlider>(GetWidgetFromName(Names[I]));Slider->SetValue(Values[I]);Slider->OnValueChanged.Broadcast(Values[I]);}
+        for(int32 I=0;I<3;++I){auto* Slider=Cast<USlider>(GetWidgetFromName(Names[I]));if(!Slider){Check(*FString::Printf(TEXT("slider_%s"),Names[I]),false);continue;}Slider->SetValue(Values[I]);Slider->OnValueChanged.Broadcast(Values[I]);}
         Check(TEXT("music_slider"),FMath::IsNearlyEqual(C->Saved->Volume,.25f)&&C->AudioVideo->Music&&FMath::IsNearlyEqual(C->AudioVideo->Music->VolumeMultiplier,.25f));
         Check(TEXT("effects_slider"),FMath::IsNearlyEqual(C->Saved->EffectsVolume,.55f));Check(TEXT("sensitivity_slider"),FMath::IsNearlyEqual(C->Saved->Sensitivity,1.65f,1.e-4f));
-        Click(TEXT("LanguageButton"));Check(TEXT("english_translation"),C->Saved->Language==0&&Texts.FindRef(TEXT("PlayButtonLabel"))->GetText().ToString()==TEXT("PLAY"));Click(TEXT("LanguageButton"));
+        Click(TEXT("LanguageButton"));{auto PlayLabel=Texts.FindRef(TEXT("PlayButtonLabel"));Check(TEXT("english_translation"),C->Saved->Language==0&&PlayLabel&&PlayLabel->GetText().ToString()==TEXT("PLAY"));}Click(TEXT("LanguageButton"));
         const int32 Camera=C->Saved->CameraMode;Click(TEXT("CameraButton"));Check(TEXT("camera_cycle"),C->Saved->CameraMode==(Camera+1)%3);C->Saved->CameraMode=Camera;C->Saved->ReducedMotion=Camera==1;
         Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_on"),C->Saved->PauseInSettings&&C->IsPaused());Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_off"),!C->Saved->PauseInSettings&&!C->IsPaused());RefreshScreen();break;}
     case 9:Shot(TEXT("04_Settings_PL"));break;
     case 10:Click(TEXT("SaveSettingsButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("settings_persisted"),Loaded&&FMath::IsNearlyEqual(Loaded->Volume,.25f)&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.55f)&&FMath::IsNearlyEqual(Loaded->Sensitivity,1.65f,1.e-4f));}Click(TEXT("CreditsButton"));break;
     case 11:UppercaseText();Check(TEXT("credits_screen"),C->Screen==S::Credits);Bounds(TEXT("credits_bounds"));Shot(TEXT("05_Credits_PL"));break;
     case 12:Click(TEXT("CreditsBackButton"));Click(TEXT("PlayButton"));Check(TEXT("game_input_restored"),C->Screen==S::Game&&!C->IsPaused()&&!C->bShowMouseCursor);GetWorld()->GetAuthGameMode<AFootballMode>()->Referee->Goals=7;break;
-    case 13:UppercaseText();Check(TEXT("live_score"),Texts.FindRef(TEXT("GoalsValue"))->GetText().ToString()==TEXT("07"));Shot(TEXT("06_HUD_PL"));break;
+    case 13:UppercaseText();{auto GoalsLabel=Texts.FindRef(TEXT("GoalsValue"));Check(TEXT("live_score"),GoalsLabel&&GoalsLabel->GetText().ToString()==TEXT("07"));}Shot(TEXT("06_HUD_PL"));break;
     case 14:C->Charging=true;C->ChargeStarted=GetWorld()->GetTimeSeconds()-ErlingShot::HoldSecondsFromPower(.9f);UpdateValues();Shot(TEXT("07_Shot_PL"));break;
     case 15:C->Charging=false;C->PauseToggle();break;
     case 16:UppercaseText();Check(TEXT("pause_screen"),C->Screen==S::Pause&&C->IsPaused()&&C->bShowMouseCursor);Bounds(TEXT("pause_bounds"));Shot(TEXT("08_Pause_PL"));break;
-    case 17:Key(EKeys::Tab);Check(TEXT("keyboard_tab_navigation"),GetWidgetFromName(TEXT("PauseSettingsButton"))->HasAnyUserFocus());Click(TEXT("PauseSettingsButton"));Check(TEXT("settings_from_pause"),C->Screen==S::Settings&&C->SettingsReturn==S::Pause&&C->IsPaused());Click(TEXT("SaveSettingsButton"));Check(TEXT("return_to_pause"),C->Screen==S::Pause&&C->IsPaused());Click(TEXT("ResumeButton"));Check(TEXT("resume_game"),C->Screen==S::Game&&!C->IsPaused());break;
+    case 17:Key(EKeys::Tab);{UWidget* PauseSettings=GetWidgetFromName(TEXT("PauseSettingsButton"));Check(TEXT("keyboard_tab_navigation"),PauseSettings&&PauseSettings->HasAnyUserFocus());}Click(TEXT("PauseSettingsButton"));Check(TEXT("settings_from_pause"),C->Screen==S::Settings&&C->SettingsReturn==S::Pause&&C->IsPaused());Click(TEXT("SaveSettingsButton"));Check(TEXT("return_to_pause"),C->Screen==S::Pause&&C->IsPaused());Click(TEXT("ResumeButton"));Check(TEXT("resume_game"),C->Screen==S::Game&&!C->IsPaused());break;
     case 18:C->ChangeScreen(S::Editor);C->Saved->Language=0;RefreshScreen();break;
     case 19:UppercaseText();Shot(TEXT("09_Character_EN"));break;
     case 20:Key(EKeys::Escape);Check(TEXT("escape_returns_from_character"),C->Screen==S::Main);break;
@@ -171,9 +178,7 @@ void UErlingInterface::RunUIChecks()
     case 22:C->ChangeScreen(S::Settings);break;
     case 23:UppercaseText();Shot(TEXT("11_Settings_EN"));break;
     default:
-        FFileHelper::SaveStringToFile(CheckReport,*(Directory/TEXT("checks.txt")));
-        UE_LOG(LogTemp,Display,TEXT("ERLING_UI_CHECKS_COMPLETE: %s"),CheckFailed?TEXT("FAIL"):TEXT("PASS"));
-        FPlatformMisc::RequestExitWithStatus(false,CheckFailed?1:0);break;
+        ErlingTestRun::Finish(UIRun,TEXT("ERLING_UI_CHECKS_COMPLETE"),CheckReport,CheckFailed);break;
     }
     ++CheckStage;NextCheck=Now+1.1;
 }
