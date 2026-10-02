@@ -1,6 +1,7 @@
 #include "Football.h"
 #include "ErlingAnimation.h"
 #include "ErlingTuning.h"
+#include "ErlingBall.h"
 #include "ErlingProfile.h"
 #include "ErlingInterface.h"
 #include "ErlingShot.h"
@@ -19,6 +20,7 @@
 #include "UnrealClient.h"
 #include "SkeletalRenderPublic.h"
 #include "Kismet/GameplayStatics.h"
+#include "PhysicsProxy/SingleParticlePhysicsProxy.h"
 
 #if !UE_BUILD_SHIPPING
 // Opt-in runtime regression checks (-ErlingTest_Latest). Never compiled into Shipping.
@@ -455,7 +457,10 @@ void AFootballController::RunChecks()
         bUsingGamepadInput=true;TestDigitalMoveIntent=false;Saved->CameraMode=GamepadMoveCameraModes[Pose];Yaw=GamepadMoveYaws[Pose];
         Forward(GamepadMoveForward[Pose]*Scale);Right(GamepadMoveRight[Pose]*Scale);
     }
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
+    // Stages 192/194 observe the avatar after a trap was cancelled; a resumed Kick_* gesture (or re-armed trap) latches here.
+    static bool TrapCancelResumed=false;
+    if((TestStage_Latest==192||TestStage_Latest==194)&&Avatar&&(Avatar->BallTrapActive||Avatar->CurrentAnimation.StartsWith(TEXT("Kick_"))))TrapCancelResumed=true;
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -1379,6 +1384,50 @@ void AFootballController::RunChecks()
         else if(SettingsLeaveTestSlot)ChangeScreen(EScreen::Game);
         Wait=.1f;break;
     }
+    case 190:
+    {
+        // bUseCCD only reaches the Chaos particle through FBodyInstance::SetUseCCD/InitBody/SetSimulatePhysics, so read the
+        // game-thread particle flag instead of the BodyInstance field (a field written after SetSimulatePhysics stays CCD-off in Chaos).
+        auto ChaosCcd=[](const UStaticMeshComponent* Mesh){const auto Handle=Mesh->BodyInstance.GetPhysicsActor();return Handle&&Handle->GetGameThreadAPI().CCDEnabled();};
+        Mode->ResetBall();
+        Check(TEXT("live_ball_ccd_enabled_in_chaos"),ChaosCcd(Mode->Ball));
+        UStaticMeshComponent* Copy=Mode->BallActor->SpawnFinishedCopy();
+        Check(TEXT("finished_ball_copy_spawned"),Copy!=nullptr);
+        if(Copy)
+        {
+            Check(TEXT("finished_ball_copy_ccd_enabled_in_chaos"),ChaosCcd(Copy));
+            if(AActor* CopyActor=Copy->GetOwner())CopyActor->Destroy();
+        }
+        Avatar->CancelBallTrap();ResetPlayer();Wait=.5f;break;
+    }
+    case 191:
+    {
+        // Jumping mid-trap must close the gesture; otherwise UpdateAction returns early while airborne and the Kick_* clip resumes after landing.
+        TrapCancelResumed=false;Avatar->BallTrapCount=0;
+        Avatar->StartBallTrap(TEXT("foot_l"));
+        Check(TEXT("trap_gesture_starts_before_jump"),Avatar->BallTrapActive&&Avatar->BallTrapCount==1&&Avatar->CurrentAnimation==TEXT("Kick_Left"));
+        Avatar->StartPhysicalJump();
+        Check(TEXT("jump_cancels_ball_trap"),Avatar->PhysicalJump&&!Avatar->BallTrapActive&&!Avatar->CurrentAnimation.StartsWith(TEXT("Kick_")));
+        Check(TEXT("jump_after_trap_orients_to_movement"),Avatar->GetCharacterMovement()->bOrientRotationToMovement);
+        Wait=2.5f;break;
+    }
+    case 192:
+        Check(TEXT("jump_never_resumes_trap_gesture_after_landing"),!TrapCancelResumed&&!Avatar->BallTrapActive);
+        Avatar->CancelBallTrap();ResetPlayer();Wait=.5f;break;
+    case 193:
+    {
+        // Turning in place mid-trap must close the gesture too; the trap clip may not resume once the turn finishes.
+        TrapCancelResumed=false;Avatar->BallTrapCount=0;
+        Avatar->StartBallTrap(TEXT("foot_r"));
+        Check(TEXT("trap_gesture_starts_before_turn"),Avatar->BallTrapActive&&Avatar->BallTrapCount==1&&Avatar->CurrentAnimation==TEXT("Kick_Right"));
+        Avatar->BeginTurn(90.f);
+        Check(TEXT("turn_cancels_ball_trap"),Avatar->TurningInPlace&&!Avatar->BallTrapActive&&!Avatar->CurrentAnimation.StartsWith(TEXT("Kick_")));
+        Check(TEXT("turn_after_trap_keeps_turn_orientation_lock"),!Avatar->GetCharacterMovement()->bOrientRotationToMovement);
+        Wait=1.2f;break;
+    }
+    case 194:
+        Check(TEXT("turn_never_resumes_trap_gesture_after_turning"),!TrapCancelResumed&&!Avatar->BallTrapActive&&!Avatar->TurningInPlace);
+        Avatar->CancelBallTrap();ResetPlayer();Wait=.1f;break;
     default:
         FFileHelper::SaveStringToFile(Report,*(FPaths::ProjectSavedDir()/TEXT("runtime_checks_Latest.txt")));
         FPlatformMisc::RequestExit(false);return;
