@@ -14,8 +14,10 @@
 #include "Engine/World.h"
 #include "Engine/StaticMeshActor.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Misc/App.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
@@ -475,7 +477,7 @@ void AFootballController::RunChecks()
     // Stages 192/194 observe the avatar after a trap was cancelled; a resumed Kick_* gesture (or re-armed trap) latches here.
     static bool TrapCancelResumed=false;
     if((TestStage_Latest==192||TestStage_Latest==194)&&Avatar&&(Avatar->BallTrapActive||Avatar->CurrentAnimation.StartsWith(TEXT("Kick_"))))TrapCancelResumed=true;
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -1443,6 +1445,42 @@ void AFootballController::RunChecks()
     case 194:
         Check(TEXT("turn_never_resumes_trap_gesture_after_turning"),!TrapCancelResumed&&!Avatar->BallTrapActive&&!Avatar->TurningInPlace);
         Avatar->CancelBallTrap();ResetPlayer();Wait=.1f;break;
+    case 195:case 196:case 197:case 198:case 199:case 200:case 201:
+    {
+        // Chaos clamps its step to MaxPhysicsDeltaTime, so below that frame rate the ball's clock falls behind game time and
+        // the character outruns it. Roll a free ball for one game second at 60, 24 and 20 FPS and compare the speeds
+        // (t.OverrideFPS forces the frame delta; FApp's fixed step cannot be changed mid-run). Even steps switch the frame
+        // rate and let it settle, odd steps start the roll, the next even step reads it.
+        static float Speed[3];static double StartTime;static FVector StartPosition;static float SavedOverride;
+        IConsoleVariable* OverrideFps=IConsoleManager::Get().FindConsoleVariable(TEXT("t.OverrideFPS"));
+        if(!OverrideFps){Check(TEXT("override_fps_cvar_available"),false);Wait=.1f;break;}
+        const int32 Step=TestStage_Latest-195,Run=Step/2;
+        if(Step==0){SavedOverride=OverrideFps->GetFloat();ChangeScreen(EScreen::Game);}
+        if(Step>0&&Step%2==0)
+        {
+            const double Elapsed=Now-StartTime;
+            Speed[Run-1]=Elapsed>.5?FVector::Dist2D(Mode->Ball->GetComponentLocation(),StartPosition)/Elapsed:0.f;
+            UE_LOG(LogTemp,Display,TEXT("FPS_PHYSICS_CLOCK run=%d frame_dt=%f speed=%f elapsed=%f"),Run-1,FApp::GetDeltaTime(),Speed[Run-1],Elapsed);
+        }
+        if(Step==6)
+        {
+            OverrideFps->Set(SavedOverride,ECVF_SetByCode);
+            // Integration error at coarse steps costs under 2%; a lagging physics clock costs 20-30%.
+            Check(TEXT("ball_physics_clock_matches_game_time_24fps"),Speed[0]>100.f&&FMath::Abs(Speed[1]/Speed[0]-1.f)<.03f);
+            Check(TEXT("ball_physics_clock_matches_game_time_20fps"),Speed[0]>100.f&&FMath::Abs(Speed[2]/Speed[0]-1.f)<.03f);
+            Mode->ResetBall();ResetPlayer();Wait=.1f;break;
+        }
+        if(Step%2==0)
+        {
+            const float Rates[]={60.f,24.f,20.f};
+            OverrideFps->Set(Rates[Run],ECVF_SetByCode);
+            ResetPlayer();Mode->ResetBall();Mode->Referee->LastShot=-10.f;Wait=.3f;break;
+        }
+        StartPosition=FVector(0,1200,22);StartTime=Now;
+        Mode->Ball->SetWorldLocation(StartPosition,false,nullptr,ETeleportType::TeleportPhysics);
+        Mode->Ball->SetPhysicsLinearVelocity(FVector(800,0,0));
+        Wait=1.f;break;
+    }
     default:
         ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;
     }
