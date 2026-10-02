@@ -139,7 +139,8 @@ void AFootballController::Forward(float V)
 			if (Avatar->ActionInterruptible)
 				Avatar->ClearAction();
 		}
-		if (Avatar->IsMovementLocked())
+		// A gamepad's smoothed world intent is applied once, in Tick.
+		if (Avatar->IsMovementLocked() || bUsingGamepadInput)
 			return;
 		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
 		Avatar->AddMovementInput(FRotator(0, MoveYaw, 0).Vector(), V);
@@ -157,7 +158,7 @@ void AFootballController::Right(float V)
 			if (Avatar->ActionInterruptible)
 				Avatar->ClearAction();
 		}
-		if (Avatar->IsMovementLocked())
+		if (Avatar->IsMovementLocked() || bUsingGamepadInput)
 			return;
 		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
 		Avatar->AddMovementInput(FRotationMatrix(FRotator(0, MoveYaw, 0)).GetUnitAxis(EAxis::Y), V);
@@ -252,10 +253,8 @@ void AFootballController::Tick(float Dt)
 		FVector TargetMoveInput = GetMoveIntentWorld().GetClampedToMaxSize(1.f);
 		const float SmoothingSpeed = TargetMoveInput.IsNearlyZero() ? 24.f : 18.f;
 		SmoothedGamepadMoveInput = FMath::VInterpTo(SmoothedGamepadMoveInput, TargetMoveInput, Dt, SmoothingSpeed).GetClampedToMaxSize(1.f);
-		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
-		const FRotator MoveRotation(0, MoveYaw, 0);
-		Avatar->AddMovementInput(MoveRotation.Vector(), SmoothedGamepadMoveInput.X);
-		Avatar->AddMovementInput(FRotationMatrix(MoveRotation).GetUnitAxis(EAxis::Y), SmoothedGamepadMoveInput.Y);
+		// GetMoveIntentWorld() is already world-space and Forward/Right add nothing for the pad.
+		Avatar->AddMovementInput(SmoothedGamepadMoveInput.GetSafeNormal(), SmoothedGamepadMoveInput.Size());
 	}
 	UpdateEditorInput(Dt);
 	if (Avatar->GetActorLocation().Z < -250)
