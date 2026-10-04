@@ -43,7 +43,7 @@ void UErlingAudioVideo::UpdateMusicVolume(float V)
 	if (Music)
 		Music->SetVolumeMultiplier(Saved->Volume);
 }
-void UErlingAudioVideo::ApplyQuality()
+void UErlingAudioVideo::ApplyQuality(bool bPersist)
 {
 	UFootballSave* Saved = Controller()->Saved;
 	if (!Saved)
@@ -53,7 +53,11 @@ void UErlingAudioVideo::ApplyQuality()
 	{
 		G->SetOverallScalabilityLevel(Saved->Quality);
 		G->SetResolutionScaleValueEx(Saved->Quality == 0 ? 70 : 100);
-		G->ApplySettings(false);
+		// Scalability only: ApplySettings would also re-apply the saved resolution/window mode over
+		// -windowed/-ResX/-ResY and rewrite GameUserSettings.ini on every start.
+		G->ApplyNonResolutionSettings();
+		if (bPersist)
+			G->SaveSettings();
 	}
 	auto Set = [](const TCHAR* N, int V)
 	{

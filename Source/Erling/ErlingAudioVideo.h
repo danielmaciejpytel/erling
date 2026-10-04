@@ -24,7 +24,8 @@ public:
 	void PlayEffect(const FString& Name, float Gain = 1.f);
 	void UpdateEffectsVolume(float V);
 	void UpdateMusicVolume(float V);
-	void ApplyQuality();
+	/** Applies the saved quality preset. bPersist also writes GameUserSettings.ini (only for an explicit change). */
+	void ApplyQuality(bool bPersist = false);
 
 	UPROPERTY() UAudioComponent* Music = nullptr;
 	UPROPERTY() TMap<FString, USoundBase*> Effects;

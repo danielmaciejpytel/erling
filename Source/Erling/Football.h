@@ -106,7 +106,7 @@ public:
  void PlayEffect(const FString& Name,float Gain=1.f){AudioVideo->PlayEffect(Name,Gain);}
  void UpdateEffectsVolume(float V){AudioVideo->UpdateEffectsVolume(V);}
  void UpdateMusicVolume(float V){AudioVideo->UpdateMusicVolume(V);}
- void ApplyQuality(){AudioVideo->ApplyQuality();}
+ void ApplyQuality(bool bPersist=false){AudioVideo->ApplyQuality(bPersist);}
  float EditorZoom=0; bool Dragging=false,MouseWasDown=false; float LastMouseX=0;
  bool Charging=false,ShotChargeArmed=false,ShotBufferActive=false;
  // Buffer power stays in the ballistic curve's 0..1.5 range, independent of button hold duration.

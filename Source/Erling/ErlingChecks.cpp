@@ -23,9 +23,10 @@
 #include "UnrealClient.h"
 #include "SkeletalRenderPublic.h"
 #include "Kismet/GameplayStatics.h"
-#include "PhysicsProxy/SingleParticlePhysicsProxy.h"
 
 #if !UE_BUILD_SHIPPING
+// Chaos is linked only outside Shipping (Erling.Build.cs); used to read the particle's CCD flag.
+#include "PhysicsProxy/SingleParticlePhysicsProxy.h"
 // Opt-in runtime regression checks (-ErlingTest_Latest). Never compiled into Shipping.
 void AFootballController::RunChecks()
 {
