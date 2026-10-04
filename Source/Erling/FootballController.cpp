@@ -126,7 +126,7 @@ void AFootballController::SetupInputComponent()
 	InputComponent->BindAction(TEXT("Sprint"), IE_Released, this, &AFootballController::SprintOff);
 	InputComponent->BindAction(TEXT("Kick"), IE_Pressed, this, &AFootballController::StartCharge);
 	InputComponent->BindAction(TEXT("Kick"), IE_Released, this, &AFootballController::ReleaseCharge);
-	InputComponent->BindAction(TEXT("ResetBall"), IE_Pressed, this, &AFootballController::Reset);
+	InputComponent->BindAction(TEXT("ResetBall"), IE_Pressed, this, &AFootballController::ResetPressed);
 	auto& B = InputComponent->BindAction(TEXT("Pause"), IE_Pressed, this, &AFootballController::PauseToggle);
 	B.bExecuteWhenPaused = true;
 }

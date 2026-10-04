@@ -163,3 +163,10 @@ void AFootballMode::PreserveFinishedBall()
 			Oldest->GetOwner()->Destroy();
 	}
 }
+void AFootballMode::ClearFinishedBalls()
+{
+	for (UStaticMeshComponent* Finished : FinishedBalls)
+		if (IsValid(Finished) && Finished->GetOwner())
+			Finished->GetOwner()->Destroy();
+	FinishedBalls.Reset();
+}

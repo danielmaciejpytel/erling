@@ -76,6 +76,16 @@ void AFootballController::UpdateDemo(float Dt)
 		Avatar->AddMovementInput(Direction.GetSafeNormal(), 1);
 	FVector To = M->Ball->GetComponentLocation() - Avatar->GetActorLocation();
 	To.Z = 0;
+	// Safety nets so the background demo can never stall: turn back to a ball the runner has run past,
+	// and restart a receive/dribble that lost the ball or never reached its shot point.
+	if (DemoPhase == 0 && To.X * DemoDirection < -150.f)
+		DemoDirection = -DemoDirection;
+	if (DemoPhase == 2 && T - DemoReceiveAt > 8.f)
+	{
+		DemoPhase = 0;
+		DemoShotTargetX = 0.f;
+		M->ResetBall();
+	}
 	if (DemoPhase == 0)
 	{
 		// The midfield ball is a waiting ball. It must not anticipate the runner or slide

@@ -150,9 +150,25 @@ void AFootballController::ChangeScreen(EScreen Next)
 		CameraRig->PitchShotHoldRemaining = 0.f;
 		CameraRig->PitchShotOffset = FVector::ZeroVector;
 		Reset();
+		// A new match (not a resume from Pause/Settings): no score and no finished balls carried over
+		// from the previous match or from the menu demo's shots.
+		if (auto* M = GetWorld()->GetAuthGameMode<AFootballMode>())
+		{
+			M->Referee->Goals = 0;
+			M->ClearFinishedBalls();
+		}
 	}
 	if (Next == EScreen::Main && Old != EScreen::Credits && !ResumeFromSettings)
 	{
+		// The demo only steers gently toward the pitch axis (UpdateDemo), so a runner left far off it
+		// would pass the ball and never receive it. Restart it from the demo's start position.
+		// Only on a return from another screen; the start-up demo keeps its spawn placement.
+		if (Old != EScreen::Main && FMath::Abs(Avatar->GetActorLocation().Y) > 150.f)
+		{
+			Avatar->GetCharacterMovement()->StopMovementImmediately();
+			Avatar->SetActorLocation(FVector(-350, 0, 100));
+			Avatar->SetActorRotation(FRotator::ZeroRotator);
+		}
 		const float X = Avatar->GetActorLocation().X;
 		DemoPhase = FMath::Abs(X) < 240 ? 4 : 0;
 		DemoDirection = DemoPhase == 4 ? (X >= 0 ? 1 : -1) : (X > 0 ? -1 : 1);

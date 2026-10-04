@@ -83,6 +83,8 @@ public:
  void Dribble(AFootballPlayer* Player,float Dt){Possession->Dribble(Player,Dt);}
  UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FinishedBalls;
  void PreserveFinishedBall();
+ /** Destroys every kept finished ball (a new match starts with an empty pitch). */
+ void ClearFinishedBalls();
  void ResetBall(); void Kick(AFootballPlayer* Avatar,float Seconds=1.f);
  bool HasBall(const AFootballPlayer* Player)const{return Possession->HasBall(Player);}
  bool HasDribbleControl(const AFootballPlayer* Player)const{return Possession->HasDribbleControl(Player);}
@@ -118,7 +120,7 @@ public:
  int DemoDirection=1,DemoPhase=0,DemoShotDistanceIndex=-1; float DemoShotAt=0,DemoShotTargetX=0;
  float DemoReceiveAt=0,DemoFootSide=18; FVector DemoReceivePosition=FVector::ZeroVector;
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt);
- void SlidePressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
+ void SlidePressed(); void ResetPressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(bool Held); void CancelPendingActions();
  bool SpaceHeld=false,GoalSpacePending=false,GoalCelebrationUsed=true,PendingShot=false,PendingTrip=false;
 	bool GoalHoldRequested=false; float MoveForward=0,MoveRight=0;
 	FVector SmoothedGamepadMoveInput=FVector::ZeroVector;

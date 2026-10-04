@@ -221,6 +221,12 @@ void AFootballController::FireShot(float Seconds, FVector AimOverride)
 	GoalSpacePending = false;
 	SpaceHeld = false;
 }
+void AFootballController::ResetPressed()
+{
+	// The R / Y key resets only the match ball; in the menus it would break the background demo.
+	if (Screen == EScreen::Game)
+		Reset();
+}
 void AFootballController::Reset()
 {
 	if (Screen == EScreen::Game && Avatar && Avatar->IsMovementLocked())

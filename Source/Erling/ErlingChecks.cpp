@@ -478,7 +478,10 @@ void AFootballController::RunChecks()
     // Stages 192/194 observe the avatar after a trap was cancelled; a resumed Kick_* gesture (or re-armed trap) latches here.
     static bool TrapCancelResumed=false;
     if((TestStage_Latest==192||TestStage_Latest==194)&&Avatar&&(Avatar->BallTrapActive||Avatar->CurrentAnimation.StartsWith(TEXT("Kick_"))))TrapCancelResumed=true;
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
+    // Stage 203 watches the menu demo after a Pause->Main return from far off the pitch axis; a real receive latches here.
+    static bool DemoReceivedAfterFarReturn=false;
+    if(TestStage_Latest==203&&DemoPhase==2)DemoReceivedAfterFarReturn=true;
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
@@ -1482,6 +1485,36 @@ void AFootballController::RunChecks()
         Mode->Ball->SetPhysicsLinearVelocity(FVector(800,0,0));
         Wait=1.f;break;
     }
+    case 202:
+        // A match with a score and a finished ball, then Pause -> Main from far off the pitch axis.
+        ChangeScreen(EScreen::Game);ResetPlayer();
+        Mode->Referee->Goals=3;Mode->Referee->ShotInFlight=true;Mode->ResetBall();
+        Check(TEXT("demo_state_setup_has_finished_ball"),Mode->FinishedBalls.Num()>0);
+        Avatar->SetActorLocation(FVector(1500,1200,100));
+        ChangeScreen(EScreen::Pause);ChangeScreen(EScreen::Main);
+        Check(TEXT("far_return_to_menu_recentres_demo_runner"),FMath::Abs(Avatar->GetActorLocation().Y)<1.f&&DemoPhase==0);
+        DemoReceivedAfterFarReturn=false;Wait=6.f;break;
+    case 203:
+    {
+        Check(TEXT("demo_receives_ball_after_far_return"),DemoReceivedAfterFarReturn);
+        // R / Y in the menu must not reset the ball under the demo.
+        const FVector Placed(500,300,ErlingBall::RestHeight);
+        Mode->Ball->SetWorldLocation(Placed,false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        ResetPressed();
+        Check(TEXT("reset_key_ignored_outside_game"),FVector::Dist2D(Mode->Ball->GetComponentLocation(),Placed)<5.f);
+        Wait=.1f;break;
+    }
+    case 204:
+        // Play from the menu starts a new match: no score and no finished balls from the previous match or the demo.
+        ChangeScreen(EScreen::Game);
+        Check(TEXT("new_match_resets_goal_counter"),Mode->Referee->Goals==0);
+        Check(TEXT("new_match_clears_finished_balls"),Mode->FinishedBalls.Num()==0);
+        Mode->Referee->Goals=2;Wait=.1f;break;
+    case 205:
+        // Resuming from Pause is the same match.
+        ChangeScreen(EScreen::Pause);ChangeScreen(EScreen::Game);
+        Check(TEXT("resume_keeps_goal_counter"),Mode->Referee->Goals==2);
+        Mode->Referee->Goals=0;ResetPlayer();Mode->ResetBall();Wait=.1f;break;
     default:
         ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;
     }
