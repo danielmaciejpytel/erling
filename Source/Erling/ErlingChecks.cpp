@@ -77,6 +77,16 @@ void AFootballController::RunChecks()
             Avatar->GetCharacterMovement()->StopMovementImmediately();
             Avatar->SetActorLocation(FVector(-350,0,100));
             Avatar->SetActorRotation(FRotator::ZeroRotator);
+            Avatar->SetAnimation(TEXT("Idle_Breathe"));
+            StageStarted=Now;Stage=3;return;
+        }
+        if(Stage==3)
+        {
+            // The neutral pose is read only once the springs have settled from the menu demo run
+            // and the hairstyle switch; reading it on the first game frame made the check flaky.
+            Avatar->SetAnimation(TEXT("Idle_Breathe"));
+            Avatar->GetCharacterMovement()->Velocity=FVector::ZeroVector;
+            if(Now-StageStarted<1.0)return;
             Avatar->SetAnimation(TEXT("Run"));
             Avatar->GetCharacterMovement()->Velocity=FVector(600,0,0);
             const FTransform Head=Bun->GetSocketTransform(TEXT("head"),RTS_Component);

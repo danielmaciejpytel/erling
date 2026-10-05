@@ -434,6 +434,14 @@ void UErlingMovement::CalcVelocity(float Dt,float Friction,bool Fluid,float Brak
                         Mode->Possession->DribbleDirection=ChaseDirection;
                         LastMoveInputDirection=ChaseDirection;
                     }
+                    else if(!Mode->Possession->PossessionActive&&Speed>1.f)
+                    {
+                        // Close behind the touch keep the pace but still run at the ball. Holding
+                        // the old heading could leave the runner coasting beside it, never in contact.
+                        const float NewYaw=FMath::FixedTurn(Velocity.Rotation().Yaw,Gap.Rotation().Yaw,540.f*Dt);
+                        const FVector Heading=FRotator(0,NewYaw,0).Vector();
+                        Velocity.X=Heading.X*Speed;Velocity.Y=Heading.Y*Speed;
+                    }
                     Acceleration=FVector::ZeroVector;
                     TurnSkidRemaining=0.f;
                     return;

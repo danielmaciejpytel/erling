@@ -558,7 +558,11 @@ void UErlingBallPossession::Dribble(AFootballPlayer* Player, float Dt)
 			SprintDribbleTouchCount++;
 			SprintReleaseDirection = Direction;
 			const float Along = FMath::Max(0.f, FVector::DotProduct(Player->GetVelocity(), SprintReleaseDirection));
-			FVector V = SprintReleaseDirection * (Along + ReleasePush);
+			// A touch while cutting back against the run is a drag, not a push ahead. Pushing it
+			// along the half-turned heading sent the ball off sideways faster than the planting
+			// runner, so whether the next foot still reached it depended on the stride phase.
+			const float ReversalAlpha = HasControlInput ? FMath::Clamp((TurnAmount - .5f) / .35f, 0.f, 1.f) : 0.f;
+			FVector V = SprintReleaseDirection * (Along + ReleasePush * (1.f - ReversalAlpha));
 			V.Z = 0;
 			Mode->Ball->SetLinearDamping(.08f);
 			Mode->Ball->SetPhysicsLinearVelocity(V);
