@@ -132,17 +132,17 @@ void AFootballPlayer::CancelBallTrap()
 }
 void AFootballPlayer::UpdateAction(float Dt)
 {
-	auto Advance = [this, Dt](const FString& Name, float& Time, float Rate, bool Loop)
+	auto Advance = [this, Dt](const FString& Name, float& Time, float Rate, bool Loop, float LoopStart)
 	{
 		if (auto Sequence = Animations.FindRef(Name))
 		{
 			const float Length = Sequence->GetPlayLength();
 			Time += Dt * Rate;
-			Time = Loop ? FMath::Fmod(Time, FMath::Max(.01f, Length)) : FMath::Min(Time, Length);
+			Time = Loop ? LoopStart + FMath::Fmod(Time - LoopStart, FMath::Max(.01f, Length - LoopStart)) : FMath::Min(Time, Length);
 		}
 	};
-	Advance(CurrentAnimation, AnimationTime, PlaybackRate, AnimationLoops);
-	Advance(PreviousAnimation, PreviousAnimationTime, PreviousRate, PreviousLoops);
+	Advance(CurrentAnimation, AnimationTime, PlaybackRate, AnimationLoops, AnimationLoopStart);
+	Advance(PreviousAnimation, PreviousAnimationTime, PreviousRate, PreviousLoops, 0.f);
 	AnimationBlend = FMath::Min(1.f, AnimationBlend + Dt / FMath::Max(.01f, BlendSeconds));
 	if (PreviewAnimation)
 		return;
@@ -348,9 +348,11 @@ void AFootballController::BeginCelebration()
 	Entry.Z = 0;
 	if (Clip == TEXT("Salto_Shoot"))
 	{
-		// The salto is entered at the point the salto shot used to start from. The flip is root-locked
-		// and carries the run-up (at least a short hop forward when standing).
-		constexpr float Rate = 2.6f, StartFraction = .36f * .43f;
+		// The salto starts at the take-off, after the clip's old shot. The flip is root-locked and carries
+		// the run-up (at least a short hop forward when standing).
+		constexpr float Rate = 2.6f;
+		const UAnimSequence* Salto = Avatar->Animations.FindRef(Clip);
+		const float StartFraction = Salto ? AFootballPlayer::SaltoCelebrationStartSeconds / Salto->GetPlayLength() : 0.f;
 		if (!Avatar->StartAction(AFootballPlayer::EAction::Celebrate, Clip, Rate, StartFraction, false))
 			return;
 		const float Speed = FMath::Clamp(Entry.Size2D(), 320.f, 765.f);
@@ -576,11 +578,10 @@ void AFootballController::CycleAnimationPreview(int32 Direction)
 	Avatar->PreviewAnimation = PreviewIndex < Names.Num();
 	Avatar->CurrentAnimation.Empty();
 	const FString Clip = Avatar->PreviewAnimation ? Names[PreviewIndex] : TEXT("Idle_Breathe");
-	const bool Loop = Clip.StartsWith(TEXT("Idle_")) || Clip == TEXT("Walk") || Clip == TEXT("Run") || Clip == TEXT("Sprint") ||
-	                  Clip == TEXT("Dance_Robot");
-	Avatar->SetAnimation(Clip, Loop);
+	// Every preview loops; the goal salto starts (and loops back) where the celebration starts.
+	Avatar->SetAnimation(Clip, true);
 	if (Clip == TEXT("Salto_Shoot"))
-		Avatar->AnimationTime = Avatar->Animations.FindRef(Clip)->GetPlayLength() * .36f * .43f;
+		Avatar->AnimationTime = Avatar->AnimationLoopStart = AFootballPlayer::SaltoCelebrationStartSeconds;
 	Avatar->PlaybackRate = 1;
 }
 FText AFootballController::PreviewAnimationText() const

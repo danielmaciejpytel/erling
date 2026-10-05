@@ -604,6 +604,7 @@ void AFootballController::RunChecks()
         Check(TEXT("ball_blocks_slide"),Avatar->Action==AFootballPlayer::EAction::None);
         Avatar->GetCharacterMovement()->StopMovementImmediately();OnGoal(Avatar);JumpPressed();JumpReleased();
         Check(TEXT("goal_press_plays_salto_celebration"),Avatar->CurrentAnimation==TEXT("Salto_Shoot")&&Avatar->Action==AFootballPlayer::EAction::Celebrate&&GoalCelebrationUsed&&!GoalSpacePending);
+        Check(TEXT("goal_salto_starts_after_the_shot"),FMath::IsNearlyEqual(Avatar->AnimationTime,AFootballPlayer::SaltoCelebrationStartSeconds,.02f));
         Check(TEXT("standing_celebration_hops_forward"),Avatar->ActionVelocity.Size2D()>=320.f);Wait=2.7f;break;
     case 10:
         ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();
@@ -1661,6 +1662,30 @@ void AFootballController::RunChecks()
             Forward(0);Right(0);MoveForward=0;MoveRight=0;
             Saved->CameraMode=0;Yaw=0;Pitch=-15;CameraRig->CameraPivotInitialized=false;
             ResetPlayer();Mode->ResetBall();Wait=.1f;break;
+        }
+    case 211:
+    case 212:
+        {
+            // Creator preview: every clip loops; the goal salto loops back to where the celebration starts.
+            const FString Wanted=TestStage_Latest==211?TEXT("Kick_Right"):TEXT("Salto_Shoot");
+            if(TestStage_Latest==212)
+            {
+                const UAnimSequence* Kick=Avatar->Animations.FindRef(TEXT("Kick_Right"));
+                UE_LOG(LogTemp,Display,TEXT("PREVIEW_LOOP kick time=%f length=%f loops=%d"),Avatar->AnimationTime,Kick?Kick->GetPlayLength():0.f,Avatar->AnimationLoops);
+                Check(TEXT("creator_preview_loops"),Avatar->PreviewAnimation&&Avatar->CurrentAnimation==TEXT("Kick_Right")&&Avatar->AnimationLoops&&Kick&&Avatar->AnimationTime<Kick->GetPlayLength()-.05f);
+            }
+            ChangeScreen(EScreen::Editor);
+            for(int32 Step=0;Step<40&&!(Avatar->PreviewAnimation&&Avatar->CurrentAnimation==Wanted);++Step)CycleAnimationPreview(1);
+            const UAnimSequence* Clip=Avatar->Animations.FindRef(Wanted);
+            Wait=Clip?Clip->GetPlayLength()*1.3f:.5f;break;
+        }
+    case 213:
+        {
+            const UAnimSequence* Salto=Avatar->Animations.FindRef(TEXT("Salto_Shoot"));
+            UE_LOG(LogTemp,Display,TEXT("PREVIEW_LOOP salto time=%f start=%f length=%f"),Avatar->AnimationTime,Avatar->AnimationLoopStart,Salto?Salto->GetPlayLength():0.f);
+            Check(TEXT("creator_preview_salto_loops_from_celebration_start"),Avatar->CurrentAnimation==TEXT("Salto_Shoot")&&Avatar->AnimationLoops&&Avatar->AnimationLoopStart>.1f&&
+                Avatar->AnimationTime>=Avatar->AnimationLoopStart-.001f&&Salto&&Avatar->AnimationTime<Salto->GetPlayLength()-.05f);
+            ChangeScreen(EScreen::Game);ResetPlayer();Wait=.1f;break;
         }
     default:
         ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;

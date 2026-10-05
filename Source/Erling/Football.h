@@ -53,6 +53,9 @@ public:
  float AnimationTime=0,PreviousAnimationTime=0,AnimationBlend=1,BlendSeconds=.16f,PlaybackRate=1,PreviousRate=1;
  float JumpAnimationScale=1.f;
  bool AnimationLoops=true,PreviousLoops=true,PhysicalJump=false,ActionInterruptible=false,ActionAllowsMovement=false;
+ float AnimationLoopStart=0; // a looping clip wraps back to here (the creator preview of the goal salto skips its old shot)
+ // Salto_Shoot opens with the old shot (kick until ~1.2 s); the goal celebration starts at the take-off.
+ static constexpr float SaltoCelebrationStartSeconds=1.2f;
  bool PreviewAnimation=false;
  bool BallTrapActive=false; float BallTrapElapsed=0.f; FName BallTrapFoot=NAME_None; int32 BallTrapCount=0;
  bool TurningInPlace=false; float TurnElapsed=0,TurnStartYaw=0,TurnTargetYaw=0;

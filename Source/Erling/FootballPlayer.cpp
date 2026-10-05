@@ -158,6 +158,7 @@ void AFootballPlayer::SetAnimation(const FString& Name, bool Loop)
 		CurrentAnimation = Name;
 		AnimationTime = Gait && WasGait ? Phase * A->GetPlayLength() : 0;
 		AnimationLoops = Loop;
+		AnimationLoopStart = 0;
 		AnimationBlend = PreviousAnimation.IsEmpty() ? 1 : 0;
 	}
 }
