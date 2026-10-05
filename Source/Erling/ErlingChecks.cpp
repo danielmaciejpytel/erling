@@ -11,6 +11,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "Engine/StaticMeshActor.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -23,6 +24,7 @@
 #include "UnrealClient.h"
 #include "SkeletalRenderPublic.h"
 #include "Kismet/GameplayStatics.h"
+#include "InputKeyEventArgs.h"
 
 #if !UE_BUILD_SHIPPING
 // Chaos is linked only outside Shipping (Erling.Build.cs); used to read the particle's CCD flag.
@@ -493,6 +495,21 @@ void AFootballController::RunChecks()
     if(TestStage_Latest==203&&DemoPhase==2)DemoReceivedAfterFarReturn=true;
     if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
     if(Now<TestAt)return;
+    {
+        // Stages 52-55 apply one frame of input and judge the next 0.05-0.12 s. The movement integrates the whole
+        // frame after the stage code runs, so a hitch there became extra skid time. Pin the step for those stages
+        // (a run started with -UseFixedTimeStep already is) and start them on the next, pinned frame.
+        static const bool CommandLineFixedStep=FApp::UseFixedTimeStep();
+        static bool PinnedStep=false;
+        const bool NeedsPinnedStep=!CommandLineFixedStep&&TestStage_Latest>=52&&TestStage_Latest<=55;
+        if(NeedsPinnedStep!=PinnedStep)
+        {
+            static bool SavedFixedRate=false;static float SavedRate=0.f;
+            PinnedStep=NeedsPinnedStep;
+            if(PinnedStep){SavedFixedRate=GEngine->bUseFixedFrameRate;SavedRate=GEngine->FixedFrameRate;GEngine->bUseFixedFrameRate=true;GEngine->FixedFrameRate=60.f;return;}
+            GEngine->bUseFixedFrameRate=SavedFixedRate;GEngine->FixedFrameRate=SavedRate;
+        }
+    }
     auto* Mode=GetWorld()->GetAuthGameMode<AFootballMode>();
     if(!Avatar||!Mode||!Mode->Ball)return;
     float Wait=.8f;
@@ -1532,6 +1549,14 @@ void AFootballController::RunChecks()
         // Resuming from Pause is the same match.
         ChangeScreen(EScreen::Pause);ChangeScreen(EScreen::Game);
         Check(TEXT("resume_keeps_goal_counter"),Mode->Referee->Goals==2);
+        {
+            // An idle pad's stick jitter stays inside the dead zone and must not take the input mode from the keyboard.
+            auto StickX=[this](float Amount){InputKey(FInputKeyEventArgs(nullptr,FInputDeviceId::CreateFromInternalId(1),EKeys::Gamepad_LeftX,IE_Axis,Amount,false,0));};
+            bUsingGamepadInput=false;StickX(.004f);StickX(-.05f);
+            Check(TEXT("pad_stick_noise_keeps_keyboard_mode"),!bUsingGamepadInput);
+            StickX(.6f);Check(TEXT("pad_stick_deflection_selects_gamepad"),bUsingGamepadInput);
+            StickX(0.f);bUsingGamepadInput=false;SmoothedGamepadMoveInput=FVector::ZeroVector;
+        }
         Mode->Referee->Goals=0;ResetPlayer();Mode->ResetBall();Wait=.1f;break;
     default:
         ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;

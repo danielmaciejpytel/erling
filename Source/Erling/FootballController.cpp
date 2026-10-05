@@ -18,6 +18,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/PlayerInput.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -132,7 +133,12 @@ void AFootballController::SetupInputComponent()
 }
 bool AFootballController::InputKey(const FInputKeyEventArgs& Params)
 {
-	if (Params.Event==IE_Pressed || Params.Event==IE_Repeat || !FMath::IsNearlyZero(Params.AmountDepressed))
+	// An idle stick jitters inside its dead zone; that noise must not take the input mode away from the keyboard.
+	float DeadZone = 0.f;
+	FInputAxisProperties Axis;
+	if (Params.IsGamepad() && Params.Key.IsAnalog() && PlayerInput && PlayerInput->GetAxisProperties(Params.Key, Axis))
+		DeadZone = Axis.DeadZone;
+	if (Params.Event==IE_Pressed || Params.Event==IE_Repeat || FMath::Abs(Params.AmountDepressed) > FMath::Max(DeadZone, KINDA_SMALL_NUMBER))
 		bUsingGamepadInput=Params.IsGamepad();
 	return Super::InputKey(Params);
 }
