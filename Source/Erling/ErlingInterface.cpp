@@ -26,6 +26,13 @@
 #include "UObject/UnrealType.h"
 #endif
 
+namespace
+{
+// Gamepad hint labels sit beside 48 px icons placed at Y=1 in ControlHints. Measured on 1920x1080
+// renders, this Y puts the Dantes Toon cap height on the icons' vertical centre.
+constexpr float ControllerHintLabelY=9.6f, ControllerHintLabelHeight=43.099098f;
+}
+
 void UErlingUIText::SetLanguage(bool bPolish)
 {
     const FText& Translation = bPolish ? Polish : English;
@@ -272,8 +279,8 @@ void UErlingInterface::BuildControllerHints()
         ControllerHintLabels.Add(Label);
         if(UCanvasPanelSlot* CanvasSlot=Hints->AddChildToCanvas(Label))
         {
-            CanvasSlot->SetPosition(FVector2D(0,3.900901f));
-            CanvasSlot->SetSize(FVector2D(240,43.099098f));
+            CanvasSlot->SetPosition(FVector2D(0,ControllerHintLabelY));
+            CanvasSlot->SetSize(FVector2D(240,ControllerHintLabelHeight));
         }
         ControllerHintWidgets.Add(Label);
     }
@@ -312,8 +319,8 @@ void UErlingInterface::UpdateControllerHints()
                 HintSlot->SetPosition(FVector2D(X,1));
             if(auto* HintSlot=Cast<UCanvasPanelSlot>(ControllerHintLabels[Index]->Slot))
             {
-                HintSlot->SetPosition(FVector2D(X+IconSize+IconTextGap,3.900901f));
-                HintSlot->SetSize(FVector2D(Widths[Index],43.099098f));
+                HintSlot->SetPosition(FVector2D(X+IconSize+IconTextGap,ControllerHintLabelY));
+                HintSlot->SetSize(FVector2D(Widths[Index],ControllerHintLabelHeight));
             }
             X+=IconSize+IconTextGap+Widths[Index]+Gap;
         }
