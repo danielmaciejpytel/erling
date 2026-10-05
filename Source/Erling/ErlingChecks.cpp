@@ -158,7 +158,7 @@ void AFootballController::RunChecks()
             Avatar->ClearAction();Avatar->PhysicalJump=false;Avatar->PreviewAnimation=false;Avatar->CancelBallTrap();
             Avatar->GetCharacterMovement()->SetMovementMode(MOVE_Walking);Avatar->GetCharacterMovement()->StopMovementImmediately();Avatar->SetActorLocation(FVector(-350,0,100));
             Avatar->SetActorRotation(FRotator::ZeroRotator);Avatar->SetAnimation(TEXT("Idle_Breathe"));
-            KickCooldown=0;TripChance=0;Mode->ResetBall();Mode->Referee->LastShot=-10;
+            KickCooldown=0;Mode->ResetBall();Mode->Referee->LastShot=-10;
             Mode->Ball->SetWorldLocation(FVector(-225,0,28),false,nullptr,ETeleportType::TeleportPhysics);
             Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);Saved->Language=0;
         };
@@ -203,13 +203,10 @@ void AFootballController::RunChecks()
                 FMath::IsNearlyEqual(GetWorld()->GetGravityZ(),-980.f,.1f)&&FMath::IsNearlyEqual(Preview.AimTarget.Z,Heights[I],.2f));
             CheckShot(Prefix+TEXT("hud_available"),UI!=nullptr);if(UI)UI->RunUIChecks();
             if(UI&&(I==2||I==3)){Saved->Language=1;UI->RunUIChecks();Saved->Language=0;}
-            if(I==5)TripChance=1.f;
             ReleaseCharge();
-            if(I==5)CheckShot(TEXT("overcharged_shot_can_still_schedule_trip"),PendingTrip);
             CheckShot(Prefix+TEXT("release_retains_preview_target"),PendingShot&&!Charging&&PendingAimTarget.Equals(Preview.AimTarget,.1f)&&PendingVelocity.Equals(Preview.Velocity,.1f));
-            const bool Flip=Kinds[I]==EErlingShotKind::UnderBar;
-            CheckShot(Prefix+TEXT("animation_matches_preview"),Avatar->Action==(Flip?AFootballPlayer::EAction::Flip:AFootballPlayer::EAction::Kick)&&(!Flip||Avatar->CurrentAnimation==TEXT("Salto_Shoot")));
-            if(!Flip)
+            // Every shot, under-bar included, is a plain kick that has to reach the ball.
+            CheckShot(Prefix+TEXT("animation_matches_preview"),Avatar->Action==AFootballPlayer::EAction::Kick&&(Avatar->CurrentAnimation==TEXT("Kick_Left")||Avatar->CurrentAnimation==TEXT("Kick_Right")));
             {
                 const FName FootName=Avatar->CurrentAnimation==TEXT("Kick_Left")?TEXT("foot_l"):TEXT("foot_r");
                 const FVector Foot=Avatar->GetMesh()->GetSocketLocation(FootName);
@@ -219,11 +216,9 @@ void AFootballController::RunChecks()
             UpdateActions(1.f/60.f);
             const FVector Velocity=Mode->Ball->GetPhysicsLinearVelocity();
             CheckShot(Prefix+TEXT("launches_at_contact"),Mode->Referee->ShotInFlight&&!PendingShot&&FMath::IsNearlyEqual(Velocity.Size2D(),Preview.Velocity.Size2D(),.2f));
-            if(Flip)CheckShot(TEXT("salto_releases_at_animation_start"),ShotContactTime==0.f&&Avatar->ActionElapsed==0.f);
             if(Kinds[I]==EErlingShotKind::TooHigh)
                 CheckShot(Prefix+TEXT("overcharge_keeps_high_target"),PendingAimTarget.Z>ErlingPitch::CrossbarZ+22.f&&Velocity.Z>0);
             if(I>=4)CheckShot(Prefix+TEXT("maximum_speed_is_3200"),FMath::IsNearlyEqual(Velocity.Size2D(),3200.f,.2f));
-            if(I==5){Avatar->ActionElapsed=ShotRecoverTime;UpdateActions(1.f/60.f);CheckShot(TEXT("overcharged_shot_still_trips_after_release"),Avatar->Action==AFootballPlayer::EAction::Trip);}
         }
         else if(ShotStage==7)
         {
@@ -240,8 +235,18 @@ void AFootballController::RunChecks()
             Mode->Ball->SetWorldLocation(FVector(Foot.X+25.f,Foot.Y,28),false,nullptr,ETeleportType::TeleportPhysics);
             Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
             UpdateActions(1.f/60.f);
-            CheckShot(TEXT("queued_underbar_recontact_launches_same_power"),!ShotBufferActive&&!PendingShot&&Mode->Referee->ShotInFlight&&
-                Avatar->Action==AFootballPlayer::EAction::Flip&&FMath::IsNearlyEqual(Mode->Ball->GetPhysicsLinearVelocity().Size2D(),2752.f,.2f));
+            // An under-bar shot is a normal kick: the recontact commits it, and it launches once the foot reaches the ball.
+            CheckShot(TEXT("queued_underbar_recontact_commits_same_power"),!ShotBufferActive&&PendingShot&&Avatar->Action==AFootballPlayer::EAction::Kick&&
+                FMath::IsNearlyEqual(PendingVelocity.Size2D(),2752.f,.2f));
+            {
+                const FName FootName=Avatar->CurrentAnimation==TEXT("Kick_Left")?TEXT("foot_l"):TEXT("foot_r");
+                const FVector KickFoot=Avatar->GetMesh()->GetSocketLocation(FootName);
+                Mode->Ball->SetWorldLocation(KickFoot+FVector(25,0,22),false,nullptr,ETeleportType::TeleportPhysics);
+                Avatar->ActionElapsed=ShotContactTime;
+            }
+            UpdateActions(1.f/60.f);
+            CheckShot(TEXT("queued_underbar_recontact_launches_same_power"),!PendingShot&&Mode->Referee->ShotInFlight&&
+                FMath::IsNearlyEqual(Mode->Ball->GetPhysicsLinearVelocity().Size2D(),2752.f,.2f));
         }
         else
         {
@@ -550,7 +555,7 @@ void AFootballController::RunChecks()
     switch(TestStage_Latest)
     {
     case 0:
-        Check(TEXT("all_25_animations"),Avatar->Animations.Num()==25);
+        Check(TEXT("all_17_animations"),Avatar->Animations.Num()==17);
         Check(TEXT("current_body"),Avatar->GetMesh()->GetSkeletalMeshAsset()->GetPathName().EndsWith(TEXT("SK_body.SK_body")));
         Check(TEXT("native_blending"),Cast<UErlingAnimInstance>(Avatar->GetMesh()->GetAnimInstance())!=nullptr);
         ChangeScreen(EScreen::Editor);Selection={1,0,1,1,1};Avatar->ApplyKit(Selection,Catalog);break;
@@ -558,24 +563,24 @@ void AFootballController::RunChecks()
         Screenshot(TEXT("01_Creator"));Check(TEXT("wardrobe_complete"),Avatar->Pieces.Num()==7&&Catalog.Num()==5);
         for(auto* P:Avatar->Pieces)if(P->GetSkeletalMeshAsset()->GetName()==TEXT("SK_shirt"))Check(TEXT("shirt_correctives_imported"),P->GetSkeletalMeshAsset()->GetMorphTargets().Num()>3800);
         ChangeScreen(EScreen::Game);ResetPlayer();PlaceBall();Avatar->SetActorRotation(FRotator(0,8,0));Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);TestPosition=Avatar->GetActorLocation();FireShot(1.f);
-        Check(TEXT("flip_twice_as_fast"),FMath::IsNearlyEqual(Avatar->PlaybackRate,2.6f));
-        Check(TEXT("underbar_selects_flip"),Avatar->Action==AFootballPlayer::EAction::Flip);
-        Check(TEXT("perfect_underbar_flip_without_goal_requirement"),Avatar->Action==AFootballPlayer::EAction::Flip&&FMath::Abs(PendingAimTarget.Y)>320.f);Wait=.55f;break;
+        Check(TEXT("underbar_shot_is_a_normal_kick"),FMath::IsNearlyEqual(Avatar->PlaybackRate,2.2f)&&Avatar->Action==AFootballPlayer::EAction::Kick&&
+            (Avatar->CurrentAnimation==TEXT("Kick_Left")||Avatar->CurrentAnimation==TEXT("Kick_Right")));
+        Check(TEXT("perfect_underbar_kick_without_goal_requirement"),Avatar->Action==AFootballPlayer::EAction::Kick&&FMath::Abs(PendingAimTarget.Y)>320.f);Wait=.55f;break;
     case 2:
-        Check(TEXT("flip_releases_ball_at_contact"),Mode->Referee->ShotInFlight&&!PendingShot);
-        Check(TEXT("flip_locks_movement"),Avatar->IsMovementLocked());Screenshot(TEXT("02_FlipStart"));Wait=.9f;break;
-    case 3:Screenshot(TEXT("03_FlipAir"));Wait=1.6f;break;
+        // The kick must physically reach the ball; it can no longer be fired remotely by a salto.
+        Check(TEXT("underbar_kick_releases_ball_by_contact"),Mode->Referee->ShotInFlight||!PendingShot);
+        Screenshot(TEXT("02_KickStart"));Wait=.9f;break;
+    case 3:Screenshot(TEXT("03_KickFollowThrough"));Wait=1.6f;break;
     case 4:
-        Check(TEXT("flip_unlocks"),!Avatar->IsMovementLocked());Check(TEXT("flip_travels_forward"),Avatar->GetActorLocation().X-TestPosition.X>500);ResetPlayer();PlaceBall();
-        TripChance=1;Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);FireShot(1.5f);
-        Check(TEXT("overbar_schedules_trip"),PendingTrip);Wait=.65f;break;
+        Check(TEXT("kick_unlocks"),!Avatar->IsMovementLocked());ResetPlayer();PlaceBall();
+        Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);FireShot(1.5f);
+        Check(TEXT("overcharged_shot_is_a_normal_kick"),Avatar->Action==AFootballPlayer::EAction::Kick);Wait=.65f;break;
     case 5:
-        Check(TEXT("trip_started"),Avatar->Action==AFootballPlayer::EAction::Trip);
-        Check(TEXT("trip_keeps_entry_velocity"),FMath::IsNearlyEqual(Avatar->ActionVelocity.Size2D(),510.f,8.f));
-        Forward(-1);Check(TEXT("trip_blocks_input"),Avatar->GetPendingMovementInputVector().IsNearlyZero());
-        Screenshot(TEXT("04_Trip"));Wait=2.5f;break;
+        // Overcharging no longer trips the player; the shot just carries on like any other.
+        Check(TEXT("overcharged_shot_never_trips"),Avatar->Action==AFootballPlayer::EAction::Kick||Avatar->Action==AFootballPlayer::EAction::None);
+        Screenshot(TEXT("04_Overcharge"));Wait=2.5f;break;
     case 6:
-        Check(TEXT("trip_completes_and_unlocks"),Avatar->Action==AFootballPlayer::EAction::None);
+        Check(TEXT("overcharged_shot_unlocks"),Avatar->Action==AFootballPlayer::EAction::None);
         ResetPlayer();Mode->ResetBall();Mode->Ball->SetWorldLocation(FVector(1500,1000,22));
         Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);Sprint=false;TestPosition=Avatar->GetActorLocation();SlidePressed();
         Check(TEXT("run_slide_started"),Avatar->Action==AFootballPlayer::EAction::Slide&&Avatar->SlideDistance==520);
@@ -590,11 +595,12 @@ void AFootballController::RunChecks()
         ResetPlayer();PlaceBall();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);SlidePressed();
         Check(TEXT("ball_blocks_slide"),Avatar->Action==AFootballPlayer::EAction::None);
         Avatar->GetCharacterMovement()->StopMovementImmediately();OnGoal(Avatar);JumpPressed();JumpReleased();
-        Check(TEXT("goal_tap_standing_jump"),Avatar->CurrentAnimation==TEXT("JoyJump_Standing")&&GoalCelebrationUsed&&Avatar->ActionAllowsMovement);Wait=2.7f;break;
+        Check(TEXT("goal_press_plays_salto_celebration"),Avatar->CurrentAnimation==TEXT("Salto_Shoot")&&Avatar->Action==AFootballPlayer::EAction::Celebrate&&GoalCelebrationUsed&&!GoalSpacePending);
+        Check(TEXT("standing_celebration_hops_forward"),Avatar->ActionVelocity.Size2D()>=320.f);Wait=2.7f;break;
     case 10:
-        ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();SpaceStarted-=1.01f;UpdateActions(.01f);
-        Check(TEXT("goal_hold_running_jump"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run"));
-        Check(TEXT("goal_jump_keeps_movement"),Avatar->ActionAllowsMovement&&!Avatar->IsMovementLocked()&&Avatar->GetVelocity().Size2D()>450.f);
+        ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();
+        Check(TEXT("goal_press_while_running_plays_salto"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==TEXT("Salto_Shoot"));
+        Check(TEXT("goal_salto_carries_the_run"),Avatar->IsMovementLocked()&&FMath::IsNearlyEqual(Avatar->ActionVelocity.Size2D(),510.f*1.15f,8.f));
         Screenshot(TEXT("06_Celebration"));Wait=3.2f;break;
     case 11:
         ResetPlayer();GoalCelebrationUsed=false;GoalUntil=GetWorld()->GetTimeSeconds()-.01f;JumpPressed();
@@ -602,16 +608,14 @@ void AFootballController::RunChecks()
     case 12:
         Check(TEXT("physical_jump_airborne"),Avatar->GetCharacterMovement()->IsFalling());VisiblePose(TEXT("standing_jump_mesh_visible"));Screenshot(TEXT("07_Jump"));Wait=1.f;break;
     case 13:
-        Check(TEXT("jump_lands"),!Avatar->GetCharacterMovement()->IsFalling());ResetPlayer();
-        Avatar->StartAction(AFootballPlayer::EAction::Fall,TEXT("Fall_Backward"),1.4f);Wait=1.5f;break;
-    case 14:
-        Check(TEXT("back_fall_chains_getup"),Avatar->Action==AFootballPlayer::EAction::GetUp&&Avatar->CurrentAnimation==TEXT("GetUp_Back"));Wait=2.f;break;
+        Check(TEXT("jump_lands"),!Avatar->GetCharacterMovement()->IsFalling());ResetPlayer();Wait=.1f;break;
+    case 14:break; // Stage kept (the removed fall/get-up check lived here) so later stage numbers and -LatestFromStage selectors stay valid.
     case 15:
-        Check(TEXT("getup_unlocks"),!Avatar->IsMovementLocked());ResetPlayer();PlaceBall();TripChance=0;FireShot(.5f);
-        Check(TEXT("normal_shot_no_special"),Avatar->Action==AFootballPlayer::EAction::Kick&&!PendingTrip);Wait=.45f;break;
+        ResetPlayer();PlaceBall();FireShot(.5f);
+        Check(TEXT("normal_shot_no_special"),Avatar->Action==AFootballPlayer::EAction::Kick);Wait=.45f;break;
     case 16:
         Check(TEXT("normal_shot_contact"),Mode->Referee->ShotInFlight&&!PendingShot);ResetPlayer();OnGoal(nullptr);GoalCelebrationUsed=true;OnGoal(nullptr);
-        Check(TEXT("other_scorer_no_reward"),GoalCelebrationUsed);TripChance=.33f;
+        Check(TEXT("other_scorer_no_reward"),GoalCelebrationUsed);
         ChangeScreen(EScreen::Editor);Selection={1,3,1,1,1};Avatar->ApplyKit(Selection,Catalog);Wait=1.f;break;
     case 17:
         Screenshot(TEXT("08_CreatorFinal"));
@@ -638,9 +642,7 @@ void AFootballController::RunChecks()
     case 23:
         Avatar->PreviewAnimation=true;Avatar->SetAnimation(TEXT("Salto_Shoot"),false);Avatar->AnimationTime=Avatar->Animations.FindRef(TEXT("Salto_Shoot"))->GetPlayLength()*.55f;Avatar->PlaybackRate=0;EditorZoom=.3f;Wait=.5f;break;
     case 24:Screenshot(TEXT("10_FlipClose"));break;
-    case 25:
-        Avatar->SetAnimation(TEXT("Trip_Roll_From_Run"),false);Avatar->AnimationTime=Avatar->Animations.FindRef(TEXT("Trip_Roll_From_Run"))->GetPlayLength()*.5f;Avatar->PlaybackRate=0;Wait=.5f;break;
-    case 26:Screenshot(TEXT("11_RollClose"));break;
+    case 25:case 26:break; // Stages kept (the removed trip-roll preview lived here) so later stage numbers stay valid.
     case 27:
         ChangeScreen(EScreen::Game);ResetPlayer();GoalCelebrationUsed=true;Mode->Ball->SetWorldLocation(FVector(1500,1000,22));
         Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);JumpPressed();JumpReleased();Wait=.22f;break;
@@ -653,9 +655,9 @@ void AFootballController::RunChecks()
     case 31:
         Check(TEXT("all_jump_frames_near_capsule"),JumpModelVisible);ResetPlayer();
         Avatar->StartAction(AFootballPlayer::EAction::Kick,TEXT("Kick_Right"),2.2f);OnGoal(Avatar);JumpPressed();
-        Check(TEXT("goal_press_accepted_during_recovery"),GoalSpacePending);Wait=1.1f;break;
+        Check(TEXT("goal_press_accepted_during_recovery"),GoalSpacePending);Wait=Avatar->ActionDuration+.15f;break;
     case 32:
-        Check(TEXT("held_goal_after_recovery"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run")&&Avatar->ActionAllowsMovement);JumpReleased();ResetPlayer();break;
+        Check(TEXT("goal_celebration_starts_after_recovery"),GoalCelebrationUsed&&Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==TEXT("Salto_Shoot")&&!GoalSpacePending);JumpReleased();ResetPlayer();break;
     case 33:
         MoveForward=1;Avatar->StartAction(AFootballPlayer::EAction::Emote,TEXT("Dance_Robot"),1.15f,0,true);Forward(1);
         Check(TEXT("existing_run_does_not_cancel_celebration"),Avatar->Action==AFootballPlayer::EAction::Emote);Forward(0);Forward(1);
@@ -663,13 +665,13 @@ void AFootballController::RunChecks()
     case 34:case 36:case 38:case 40:case 42:case 44:
         {
             ResetPlayer();Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);OnGoal(Avatar);JumpPressed();
-            SpaceStarted-=1.01f;UpdateActions(.01f);JumpReleased();Wait=Avatar->ActionDuration*.5f;break;
+            JumpReleased();Wait=Avatar->ActionDuration*.5f;break;
         }
     case 35:case 37:case 39:case 41:case 43:case 45:
         {
-            const FString Label=TEXT("held_running_celebration_visible");
-            VisiblePose(*Label);Check(TEXT("held_running_celebration_persists"),Avatar->Action==AFootballPlayer::EAction::Emote&&Avatar->CurrentAnimation==TEXT("JoyJump_Run")&&Avatar->ActionAllowsMovement);
-            Screenshot(TEXT("Held_JoyJump_Run"));break;
+            const FString Label=TEXT("goal_salto_celebration_visible");
+            VisiblePose(*Label);Check(TEXT("goal_salto_celebration_persists"),Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==TEXT("Salto_Shoot"));
+            Screenshot(TEXT("Goal_Salto_Celebration"));break;
         }
     case 46:
         ResetPlayer();ChangeScreen(EScreen::Main);DemoPhase=0;DemoDirection=1;Mode->ResetBall();Avatar->SetActorLocation(FVector(-350,0,98));
@@ -1113,14 +1115,14 @@ void AFootballController::RunChecks()
     case 140:
         {const float Age=Now-ShotBufferStarted;UE_LOG(LogTemp,Display,TEXT("BUFFER_REACQUIRE_130 age=%f active=%d"),Age,ShotBufferActive?1:0);Check(TEXT("buffer_survives_130_before_contact"),ShotBufferActive&&!PendingShot&&Age>1.2f&&Age<1.39f);PutBallAtNearestFoot();}Wait=.08f;break;
     case 141:
-        // Power .85 is an under-bar shot: the salto launches at contact, so it may already be in flight.
+        // Power .85 is an under-bar shot: a normal kick, which launches once the foot reaches the ball.
         Check(TEXT("buffer_commits_after_130_recontact"),!ShotBufferActive&&(PendingShot||Mode->Referee->ShotInFlight));Wait=.75f;break;
     case 142:
         Check(TEXT("buffer_130_launches"),Mode->Referee->ShotInFlight&&!PendingShot);Wait=.1f;break;
     case 143:
         ResetPlayer();Mode->ResetBall();Mode->Referee->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->Possession->SprintDribbleTouchCount=0;Mode->Possession->DribbleDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseUntil=Now+.3f;Mode->Possession->SprintNextTouchAt=0.f;
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
-        // Measure from the pose the dribble will see, not the previous stage's Salto_Shoot landing still in the sockets.
+        // Measure from the pose the dribble will see, not the previous stage's kick follow-through still in the sockets.
         // That stale foot (and the runner's first frame of movement) left the first contact distance anywhere between
         // 43 and 54 cm against the 52 cm released-touch reach, so at a coarse step the touch slipped a frame past the
         // check. 43 cm ahead of the real foot is the geometry the check had at 140 fps; nearer, the ball meets the

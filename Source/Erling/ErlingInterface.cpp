@@ -452,7 +452,7 @@ void UErlingInterface::UpdateValues()
     }
     FString Message;
     if (Game&&!Shot&&!C->GoalCelebrationUsed&&GetWorld()->GetTimeSeconds()<C->GoalUntil)
-        Message=L(TEXT("SPACE: jump  ·  hold 1 s: celebrate"),TEXT("SPACJA: skok  ·  przytrzymaj 1 s: cieszynka"));
+        Message=L(TEXT("SPACE: celebrate"),TEXT("SPACJA: cieszynka"));
     else if (!Shot && GetWorld()->GetTimeSeconds()<C->ToastUntil) Message=C->Toast;
     SetText(TEXT("ToastValue"),Message);
     if (auto* Panel=GetWidgetFromName(TEXT("ToastPanel")))

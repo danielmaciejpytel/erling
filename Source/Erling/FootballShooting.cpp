@@ -188,35 +188,18 @@ void AFootballController::FireShot(float Seconds, FVector AimOverride)
 	PendingVelocity = Shot.Velocity;
 	PendingHasAim = Shot.bHasAim;
 	PendingAimTarget = Shot.AimTarget;
-	const bool Aimed = FMath::Abs(PendingAimTarget.Y) < ErlingPitch::AimedHalfWidth;
-	const bool AboveBar = Aimed && Seconds >= 1.35f && PendingAimTarget.Z - 22 > 269;
-	// Perfect under-bar timing immediately selects the flip, regardless of whether the shot eventually scores.
-	const bool Flip = !Demo && Shot.Kind == EErlingShotKind::UnderBar;
-	PendingTrip = !Demo && AboveBar && FMath::FRand() < TripChance;
 	const FVector ShotPlanarDirection = PendingVelocity.GetSafeNormal2D();
 	const FVector ShotRight = ShotPlanarDirection.IsNearlyZero() ? Avatar->GetActorRightVector()
 	                                                             : FRotationMatrix(ShotPlanarDirection.Rotation()).GetUnitAxis(EAxis::Y);
 	const bool Left = FVector::DotProduct(BallPosition - Avatar->GetActorLocation(), ShotRight) < 0;
-	const FString Clip = Flip ? TEXT("Salto_Shoot") : Left ? TEXT("Kick_Left") : TEXT("Kick_Right");
-	ShotEntryVelocity = Avatar->GetVelocity();
-	ShotEntryVelocity.Z = 0;
-	const float Rate = Flip ? 2.6f : 2.2f;
-	const float FlipContactFraction = .36f * .43f;
-	if (!Avatar->StartAction(Flip ? AFootballPlayer::EAction::Flip : AFootballPlayer::EAction::Kick, Clip, Rate,
-	                         Flip ? FlipContactFraction : 0.f))
+	const FString Clip = Left ? TEXT("Kick_Left") : TEXT("Kick_Right");
+	const float Rate = 2.2f;
+	if (!Avatar->StartAction(AFootballPlayer::EAction::Kick, Clip, Rate))
 		return;
-	if (Flip)
-	{
-		const float Speed = FMath::Clamp(ShotEntryVelocity.Size2D(), 320.f, 765.f);
-		Avatar->EntryVelocity =
-		    (ShotEntryVelocity.IsNearlyZero() ? Avatar->GetActorForwardVector() : ShotEntryVelocity.GetSafeNormal()) * Speed;
-		Avatar->ActionVelocity = Avatar->EntryVelocity * 1.15f;
-	}
 	ShotBallStart = BallPosition;
 	ShotActorStart = Avatar->GetActorLocation();
 	const float Length = Avatar->Animations.FindRef(Clip)->GetPlayLength();
-	ShotContactTime = Flip ? 0.f : Length * .43f / Rate;
-	ShotRecoverTime = ShotContactTime + .1f;
+	ShotContactTime = Length * .43f / Rate;
 	PendingShot = true;
 	KickCooldown = Now + .3f;
 	GoalSpacePending = false;

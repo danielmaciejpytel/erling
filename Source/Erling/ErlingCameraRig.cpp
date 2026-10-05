@@ -101,7 +101,7 @@ float UErlingCameraRig::UpdatePitchCameraLead(float Dt)
 	const AFootballPlayer* Avatar = Controller()->Avatar;
 	if (!Avatar)
 		return PitchCameraLeadX;
-	const bool ShotAction = Avatar->Action == AFootballPlayer::EAction::Kick || Avatar->Action == AFootballPlayer::EAction::Flip;
+	const bool ShotAction = Avatar->Action == AFootballPlayer::EAction::Kick || Avatar->Action == AFootballPlayer::EAction::Celebrate;
 	const float LeadVelocityX = ShotAction ? Avatar->EntryVelocity.X : Avatar->GetVelocity().X;
 	const float DesiredLeadX = FMath::Clamp(LeadVelocityX * .22f, -260.f, 260.f);
 	PitchCameraLeadX = FMath::FInterpTo(PitchCameraLeadX, DesiredLeadX, Dt, 4.5f);

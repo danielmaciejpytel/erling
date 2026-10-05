@@ -155,23 +155,15 @@ void AFootballPlayer::UpdateAction(float Dt)
 			const float U = FMath::Clamp((ActionElapsed - .5f * Dt) / ActionDuration, 0.f, 1.f);
 			ActionVelocity = EntryVelocity.GetSafeNormal() * SlideDistance * 2.f / ActionDuration * (1.f - U);
 		}
-		else if (Action == EAction::Flip)
+		else if (Action == EAction::Celebrate)
+			// The goal salto carries the run-up through the flip, easing off towards the landing.
 			ActionVelocity = EntryVelocity * FMath::Lerp(1.15f, .75f, FMath::SmoothStep(.65f, 1.f, ActionElapsed / ActionDuration));
-		else if (Action == EAction::Trip)
-			ActionVelocity = EntryVelocity * (1.f - FMath::SmoothStep(.5f, .8f, ActionElapsed));
 		else if (Action == EAction::Kick)
 			ActionVelocity = EntryVelocity * FMath::Lerp(1.f, .45f, FMath::SmoothStep(0.f, .3f, ActionElapsed));
 		else
 			ActionVelocity = FVector::ZeroVector;
 		if (ActionElapsed + KINDA_SMALL_NUMBER >= ActionDuration)
-		{
-			if (Action == EAction::Fall)
-			{
-				StartAction(EAction::GetUp, TEXT("GetUp_Back"), 1.25f);
-				return;
-			}
 			ClearAction();
-		}
 		else
 			return;
 	}
@@ -330,7 +322,7 @@ void AFootballController::OnGoal(AFootballPlayer* Scorer)
 	GoalUntil = GetWorld()->GetTimeSeconds() + 5.f;
 	GoalCelebrationUsed = false;
 }
-void AFootballController::BeginCelebration(bool Held)
+void AFootballController::BeginCelebration()
 {
 	if (GoalCelebrationUsed || !Avatar)
 	{
@@ -340,14 +332,16 @@ void AFootballController::BeginCelebration(bool Held)
 	if (!Avatar->CanAct())
 		return;
 	GoalSpacePending = false;
-	const FString Clip = Held ? TEXT("JoyJump_Run") : TEXT("JoyJump_Standing");
-	const float StartFraction = Held ? .25f : 0.f;
-	if (Avatar->StartAction(AFootballPlayer::EAction::Emote, Clip, 1.32f, StartFraction, false))
+	// The only goal celebration is the salto clip, entered at the point the salto shot used to start from.
+	// The flip is root-locked and carries the run-up (at least a short hop forward when standing).
+	constexpr float Rate = 2.6f, StartFraction = .36f * .43f;
+	FVector Entry = Avatar->GetVelocity();
+	Entry.Z = 0;
+	if (Avatar->StartAction(AFootballPlayer::EAction::Celebrate, TEXT("Salto_Shoot"), Rate, StartFraction, false))
 	{
-		// Goal jumps are celebrations, not roots that pin the player to the grass.
-		// Keep normal CharacterMovement active so an already-running player carries on.
-		Avatar->ActionAllowsMovement = true;
-		Avatar->GetCharacterMovement()->bOrientRotationToMovement = true;
+		const float Speed = FMath::Clamp(Entry.Size2D(), 320.f, 765.f);
+		Avatar->EntryVelocity = (Entry.IsNearlyZero() ? Avatar->GetActorForwardVector() : Entry.GetSafeNormal()) * Speed;
+		Avatar->ActionVelocity = Avatar->EntryVelocity * 1.15f;
 		GoalCelebrationUsed = true;
 	}
 }
@@ -359,10 +353,8 @@ void AFootballController::CancelPendingActions()
 	ShotChargeAimDirection = FVector::ZeroVector;
 	ShotBufferAimDirection = FVector::ZeroVector;
 	PendingShot = false;
-	PendingTrip = false;
 	GoalSpacePending = false;
 	SpaceHeld = false;
-	GoalHoldRequested = false;
 }
 void AFootballController::UpdateActions(float Dt)
 {
@@ -406,11 +398,7 @@ void AFootballController::UpdateActions(float Dt)
 		}
 	}
 	if (GoalSpacePending)
-	{
-		GoalHoldRequested |= SpaceHeld && Now - SpaceStarted >= 1.f;
-		if (GoalHoldRequested || !SpaceHeld)
-			BeginCelebration(GoalHoldRequested);
-	}
+		BeginCelebration();
 	if (PendingShot)
 	{
 		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->Referee->BallHidden)
@@ -515,11 +503,9 @@ void AFootballController::UpdateActions(float Dt)
 			}
 		}
 	}
-	const bool DemoOrFlipFallback =
-	    PendingShot &&
-	    (ActiveScreen == EScreen::Main || ActiveScreen == EScreen::Credits || Avatar->Action == AFootballPlayer::EAction::Flip) &&
-	    Avatar->ActionElapsed >= ShotContactTime;
-	if (PendingShot && (PhysicalShotContact || DemoOrFlipFallback))
+	const bool DemoFallback =
+	    PendingShot && (ActiveScreen == EScreen::Main || ActiveScreen == EScreen::Credits) && Avatar->ActionElapsed >= ShotContactTime;
+	if (PendingShot && (PhysicalShotContact || DemoFallback))
 	{
 		PendingShot = false;
 		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>())
@@ -536,8 +522,6 @@ void AFootballController::UpdateActions(float Dt)
 			// gap during the wind-up, and pulling it back would reintroduce the visual
 			// teleport. Launch from its actual current position instead.
 			const bool Launched = Mode->LaunchShot(Avatar, PendingVelocity, true);
-			if (!Launched)
-				PendingTrip = false;
 			const bool Demo = ActiveScreen == EScreen::Main || ActiveScreen == EScreen::Credits;
 			if (Launched && Demo)
 			{
@@ -553,15 +537,8 @@ void AFootballController::UpdateActions(float Dt)
 		// If a contextual normal kick somehow still cannot physically meet the ball,
 		// fail the action rather than resurrecting the old remote/ghost kick.
 		PendingShot = false;
-		PendingTrip = false;
 		if (auto* Mode = GetWorld()->GetAuthGameMode<AFootballMode>(); Mode && Mode->Ball && !Mode->Referee->BallHidden && !Mode->Referee->ShotInFlight)
 			Mode->Ball->SetLinearDamping(.3f);
-	}
-	if (PendingTrip && !PendingShot && Avatar->ActionElapsed >= ShotRecoverTime)
-	{
-		PendingTrip = false;
-		Avatar->StartAction(AFootballPlayer::EAction::Trip, TEXT("Trip_Roll_From_Run"), 1.35f, .22f);
-		Avatar->EntryVelocity = ShotEntryVelocity;
 	}
 }
 
@@ -593,28 +570,22 @@ FText AFootballController::PreviewAnimationText() const
 		return FText::FromString(Localize(TEXT("Relaxed Idle"), TEXT("Swobodna bezczynność")));
 	static const TMap<FString, FString> LabelsEn = {{TEXT("Walk"), TEXT("Walk")}, {TEXT("Run"), TEXT("Run")},
 	    {TEXT("Sprint"), TEXT("Sprint")}, {TEXT("Kick_Right"), TEXT("Right-Foot Kick")}, {TEXT("Kick_Left"), TEXT("Left-Foot Kick")},
-	    {TEXT("Jump"), TEXT("Jump")}, {TEXT("Jump_Run"), TEXT("Running Jump")}, {TEXT("JoyJump_Run"), TEXT("Running Celebration")},
-	    {TEXT("JoyJump_Standing"), TEXT("Jump for Joy")}, {TEXT("Salto"), TEXT("Salto")},
-	    {TEXT("Salto_Shoot"), TEXT("Salto Shoot")},
-	    {TEXT("Slide_From_Run"), TEXT("Slide")}, {TEXT("Trip_Roll_From_Run"), TEXT("Trip and Roll")},
-	    {TEXT("Celebrate_Victory"), TEXT("Victory")}, {TEXT("Dance_Disco"), TEXT("Disco Dance")},
-	    {TEXT("Dance_Robot"), TEXT("Robot Dance")}, {TEXT("Fall_Backward"), TEXT("Backward Fall")},
-	    {TEXT("GetUp_Back"), TEXT("Get Up from Back")}, {TEXT("GetUp_Front"), TEXT("Get Up from Front")},
+	    {TEXT("Jump"), TEXT("Jump")}, {TEXT("Jump_Run"), TEXT("Running Jump")}, {TEXT("Salto"), TEXT("Salto")},
+	    {TEXT("Salto_Shoot"), TEXT("Goal Celebration")},
+	    {TEXT("Slide_From_Run"), TEXT("Slide")}, {TEXT("Dance_Disco"), TEXT("Disco Dance")},
+	    {TEXT("Dance_Robot"), TEXT("Robot Dance")},
 	    {TEXT("Idle_Breathe"), TEXT("Breathing")}, {TEXT("Idle_Relaxed"), TEXT("Relaxed Idle")},
-	    {TEXT("Idle_WeightShift"), TEXT("Weight Shift")}, {TEXT("Meme_RageStomp"), TEXT("Rage Stomp")}, {TEXT("Meme_Shrug"), TEXT("Shrug")},
+	    {TEXT("Idle_WeightShift"), TEXT("Weight Shift")}, {TEXT("Meme_Shrug"), TEXT("Shrug")},
 	    {TEXT("Turn_Step"), TEXT("Step Turn")}};
 	static const TMap<FString, FString> LabelsPl = {{TEXT("Walk"), TEXT("Chód")}, {TEXT("Run"), TEXT("Bieg")},
 	    {TEXT("Sprint"), TEXT("Sprint")}, {TEXT("Kick_Right"), TEXT("Strzał prawą nogą")}, {TEXT("Kick_Left"), TEXT("Strzał lewą nogą")},
-	    {TEXT("Jump"), TEXT("Skok")}, {TEXT("Jump_Run"), TEXT("Skok z biegu")}, {TEXT("JoyJump_Run"), TEXT("Cieszynka w biegu")},
-	    {TEXT("JoyJump_Standing"), TEXT("Skok z radości")}, {TEXT("Salto"), TEXT("Salto")},
-	    {TEXT("Salto_Shoot"), TEXT("Salto — strzał")},
-	    {TEXT("Slide_From_Run"), TEXT("Wślizg")}, {TEXT("Trip_Roll_From_Run"), TEXT("Potknięcie i przewrót")},
-	    {TEXT("Celebrate_Victory"), TEXT("Zwycięstwo")}, {TEXT("Dance_Disco"), TEXT("Taniec disco")},
-	    {TEXT("Dance_Robot"), TEXT("Taniec robota")}, {TEXT("Fall_Backward"), TEXT("Upadek do tyłu")},
-	    {TEXT("GetUp_Back"), TEXT("Wstawanie z pleców")}, {TEXT("GetUp_Front"), TEXT("Wstawanie z brzucha")},
+	    {TEXT("Jump"), TEXT("Skok")}, {TEXT("Jump_Run"), TEXT("Skok z biegu")}, {TEXT("Salto"), TEXT("Salto")},
+	    {TEXT("Salto_Shoot"), TEXT("Cieszynka po golu")},
+	    {TEXT("Slide_From_Run"), TEXT("Wślizg")}, {TEXT("Dance_Disco"), TEXT("Taniec disco")},
+	    {TEXT("Dance_Robot"), TEXT("Taniec robota")},
 	    {TEXT("Idle_Breathe"), TEXT("Oddychanie")}, {TEXT("Idle_Relaxed"), TEXT("Swobodna bezczynność")},
-	    {TEXT("Idle_WeightShift"), TEXT("Przenoszenie ciężaru")}, {TEXT("Meme_RageStomp"), TEXT("Wściekłe tupanie")},
-	    {TEXT("Meme_Shrug"), TEXT("Wzruszenie ramion")}, {TEXT("Turn_Step"), TEXT("Obrót krokiem")}};
+	    {TEXT("Idle_WeightShift"), TEXT("Przenoszenie ciężaru")}, {TEXT("Meme_Shrug"), TEXT("Wzruszenie ramion")},
+	    {TEXT("Turn_Step"), TEXT("Obrót krokiem")}};
 	if (!Avatar || !Avatar->PreviewAnimation)
 		return FText::FromString(Localize(TEXT("Idle"), TEXT("Bezczynność")));
 	const auto& Labels = Saved && Saved->Language == 1 ? LabelsPl : LabelsEn;

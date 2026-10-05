@@ -127,9 +127,8 @@ void AFootballPlayer::InitializeAssets()
 	}
 	Animations.Remove(TEXT("Idle_LookAround"));
 	for (auto N : {TEXT("Idle_Breathe"), TEXT("Idle_Relaxed"), TEXT("Idle_WeightShift"), TEXT("Walk"), TEXT("Run"), TEXT("Sprint"),
-	         TEXT("Kick_Right"), TEXT("Kick_Left"), TEXT("Jump"), TEXT("Jump_Run"), TEXT("JoyJump_Run"), TEXT("JoyJump_Standing"),
-	         TEXT("Salto"), TEXT("Salto_Shoot"), TEXT("Slide_From_Run"), TEXT("Trip_Roll_From_Run"), TEXT("Celebrate_Victory"), TEXT("Dance_Disco"),
-	         TEXT("Dance_Robot"), TEXT("Fall_Backward"), TEXT("GetUp_Back"), TEXT("GetUp_Front"), TEXT("Meme_RageStomp"),
+	         TEXT("Kick_Right"), TEXT("Kick_Left"), TEXT("Jump"), TEXT("Jump_Run"), TEXT("Salto"),
+	         TEXT("Salto_Shoot"), TEXT("Slide_From_Run"), TEXT("Dance_Disco"), TEXT("Dance_Robot"),
 	         TEXT("Meme_Shrug"), TEXT("Turn_Step")})
 	{
 		const FString AssetName = FString(TEXT("AN_")) + N;

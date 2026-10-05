@@ -380,7 +380,6 @@ void AFootballController::JumpPressed()
 		return;
 	SpaceHeld = true;
 	SpaceStarted = GetWorld()->GetTimeSeconds();
-	GoalHoldRequested = false;
 	if (Avatar->CanAct() && WasInputKeyJustPressed(EKeys::RightMouseButton))
 	{
 		SlidePressed();
@@ -390,6 +389,7 @@ void AFootballController::JumpPressed()
 	if (!GoalCelebrationUsed && SpaceStarted < GoalUntil)
 	{
 		GoalSpacePending = true;
+		BeginCelebration();
 		return;
 	}
 	if (!Avatar->CanAct())
@@ -398,11 +398,6 @@ void AFootballController::JumpPressed()
 }
 void AFootballController::JumpReleased()
 {
-	if (GoalSpacePending && SpaceHeld && Screen == EScreen::Game)
-	{
-		GoalHoldRequested |= GetWorld()->GetTimeSeconds() - SpaceStarted >= 1.f;
-		BeginCelebration(GoalHoldRequested);
-	}
 	SpaceHeld = false;
 	if (Avatar)
 		Avatar->StopJumping();

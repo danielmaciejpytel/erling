@@ -93,7 +93,7 @@ void AFootballController::RunProjectChecks()
 			Avatar->ApplyKit(Selection, Catalog);
 			Check(TEXT("catalog_5_categories"), Catalog.Num() == 5);
 			Check(TEXT("body_loaded"), Avatar->GetMesh()->GetSkeletalMeshAsset() != nullptr);
-			Check(TEXT("animations_loaded"), Avatar->Animations.Num() == 25);
+			Check(TEXT("animations_loaded"), Avatar->Animations.Num() == 17);
 			Shot(TEXT("01_Main"));
 			break;
 		case 1:
