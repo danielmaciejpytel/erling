@@ -493,7 +493,7 @@ void AFootballController::RunChecks()
     // Stage 203 watches the menu demo after a Pause->Main return from far off the pitch axis; a real receive latches here.
     static bool DemoReceivedAfterFarReturn=false;
     if(TestStage_Latest==203&&DemoPhase==2)DemoReceivedAfterFarReturn=true;
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;TestAt=Now+4;return;}
+    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;else if(FParse::Value(FCommandLine::Get(),TEXT("LatestFromStage="),TestStage_Latest))ChangeScreen(EScreen::Game);TestAt=Now+4;return;}
     if(Now<TestAt)return;
     {
         // Stages 52-55 apply one frame of input and judge the next 0.05-0.12 s. The movement integrates the whole
@@ -1120,7 +1120,13 @@ void AFootballController::RunChecks()
     case 143:
         ResetPlayer();Mode->ResetBall();Mode->Referee->LastShot=-10.f;SprintOn();MoveForward=0;MoveRight=0;Mode->Possession->SprintDribbleTouchCount=0;Mode->Possession->DribbleDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseDirection=FVector::ForwardVector;Mode->Possession->SprintReleaseUntil=Now+.3f;Mode->Possession->SprintNextTouchAt=0.f;
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(765,0,0);Move->LastMoveInputDirection=FVector::ForwardVector;Move->TurnSkidRemaining=0;
-        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(FVector(Foot.X+30.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(765,0,0));StartCharge();}
+        // Measure from the pose the dribble will see, not the previous stage's Salto_Shoot landing still in the sockets.
+        // That stale foot (and the runner's first frame of movement) left the first contact distance anywhere between
+        // 43 and 54 cm against the 52 cm released-touch reach, so at a coarse step the touch slipped a frame past the
+        // check. 43 cm ahead of the real foot is the geometry the check had at 140 fps; nearer, the ball meets the
+        // 55 cm capsule and stops the runner.
+        Avatar->GetMesh()->TickAnimation(0.f,false);Avatar->GetMesh()->RefreshBoneTransforms();
+        const FVector Foot=Avatar->GetMesh()->GetSocketLocation(TEXT("foot_l"));const float BallZ=Mode->Ball->GetComponentLocation().Z;Mode->Ball->SetWorldLocation(FVector(Foot.X+43.f,Foot.Y,BallZ),false,nullptr,ETeleportType::TeleportPhysics);Mode->Ball->SetPhysicsLinearVelocity(FVector(765,0,0));StartCharge();}
         Check(TEXT("rapid_touch_shot_charge_starts_before_recontact"),Charging);Forward(-1);Wait=.14f;break;
     case 144:
         {const int32 Touches=Mode->Possession->SprintDribbleTouchCount;UE_LOG(LogTemp,Display,TEXT("RAPID_TOUCH_SHOT touches=%d release=%s pending_touch=%d charging=%d"),Touches,*Mode->Possession->SprintReleaseDirection.ToString(),Mode->Possession->SprintKickPending?1:0,Charging?1:0);
