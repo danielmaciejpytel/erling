@@ -339,6 +339,18 @@ void AFootballController::UpdateAvatarFacing(float Dt, EScreen ActiveScreen, AFo
 		else if (SprintReleaseLocked)
 		{
 			Movement->bOrientRotationToMovement = false;
+			// The lock preserves an aligned foot approach, but below 80 cm UErlingMovement still turns a
+			// released run onto the ball. A yaw frozen through that turn trailed a reversing sprint by 35-40 deg
+			// until a stride happened to reach the ball again. Keep the lock, but never let the body fall more
+			// than 25 deg behind its own run.
+			const FVector Travel = Avatar->GetVelocity().GetSafeNormal2D();
+			if (Speed > 180.f && !Travel.IsNearlyZero())
+			{
+				const float TravelYaw = Travel.Rotation().Yaw;
+				const float Behind = FMath::FindDeltaAngleDegrees(TravelYaw, Avatar->GetActorRotation().Yaw);
+				if (FMath::Abs(Behind) > 25.f)
+					Avatar->SetActorRotation(FRotator(0, FMath::UnwindDegrees(TravelYaw + FMath::Sign(Behind) * 25.f), 0));
+			}
 		}
 		else if (OnBall)
 		{
