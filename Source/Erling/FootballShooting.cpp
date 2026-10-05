@@ -134,7 +134,7 @@ FErlingShotEvaluation AFootballController::EvaluateShot(float PowerSeconds, FVec
 	// into the mouth of the goal, similar to an assisted football-game shot model.
 	const bool GamepadShotIntent = !Demo && bUsingGamepadInput && CurrentDigital;
 	const bool AssistedShotIntent = DigitalShotIntent || GamepadShotIntent;
-	const float AimAssistStrength = DigitalShotIntent ? 1.f : .35f;
+	const float AimAssistStrength = DigitalShotIntent ? 1.f : .75f;
 	if (!Demo && AssistedShotIntent && FMath::Abs(Shot.Velocity.X) > 1.f)
 	{
 		const float GoalX = ErlingPitch::GoalLineFor(Shot.Velocity.X);
