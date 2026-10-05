@@ -762,6 +762,14 @@ void AFootballController::RunChecks()
         Check(TEXT("digital_diagonal_shot_can_select_goal_corner"),FMath::Abs(PendingAimTarget.Y)>220.f);
         TestDigitalMoveIntent=false;ResetPlayer();Avatar->SetActorRotation(FRotator(0,20,0));PlaceBall();MoveForward=1;MoveRight=0;FireShot(.5f);
         Check(TEXT("full_stick_analog_shot_remains_unassisted"),PendingShot&&PendingHasAim&&FMath::Abs(PendingAimTarget.Y)>319.f);
+        {
+            // Same pose on the pad: the side at the goal line is pulled 75% of the way into the goal mouth.
+            const float Raw=FMath::Abs(PendingAimTarget.Y),Full=Raw*292.f/FMath::Sqrt(Raw*Raw+292.f*292.f);
+            ResetPlayer();Avatar->SetActorRotation(FRotator(0,20,0));PlaceBall();MoveForward=1;MoveRight=0;bUsingGamepadInput=true;FireShot(.5f);
+            UE_LOG(LogTemp,Display,TEXT("GAMEPAD_SHOT_ASSIST raw=%f pad=%f expected=%f"),Raw,FMath::Abs(PendingAimTarget.Y),FMath::Lerp(Raw,Full,.75f));
+            Check(TEXT("gamepad_shot_is_assisted_toward_goal"),PendingShot&&PendingHasAim&&FMath::Abs(FMath::Abs(PendingAimTarget.Y)-FMath::Lerp(Raw,Full,.75f))<.1f*Raw);
+            bUsingGamepadInput=false;
+        }
         MoveForward=0;MoveRight=0;ResetPlayer();PlaceBall();Avatar->BallTrapCount=0;Mode->Possession->LastPossessionDirection=FVector(1,0,0);
         {auto* Move=Cast<UErlingMovement>(Avatar->GetCharacterMovement());Move->SetMovementMode(MOVE_Walking);Move->Velocity=FVector(510,0,0);Move->LastMoveInputDirection=FVector(1,0,0);Move->TurnSkidRemaining=0;}Forward(1);Wait=.35f;break;
     case 69:
