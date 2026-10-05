@@ -6,6 +6,14 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 
+namespace ErlingPlayerCamera
+{
+	// Player camera = Free camera whose yaw follows the player's back instead of look input.
+	constexpr float FollowSharpness = 3.5f;    // exponential follow; higher = less lag (lower floats more)
+	constexpr float PivotSharpness = 5.f;      // position follow (the Free camera uses 8)
+	constexpr float MaxFollowRate = 90.f;      // degrees per second; held "left" becomes a gentle arc, not a spin
+}
+
 UErlingCameraRig::UErlingCameraRig()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -35,12 +43,16 @@ void UErlingCameraRig::Update(float Dt, bool bGameplayView, bool bEditorView, AF
 			CameraPivot = P;
 			CameraPivotInitialized = true;
 		}
-		if (Mode == 0)
-			CameraPivot = FMath::VInterpTo(CameraPivot, P, Dt, 8.f);
-		else if (Mode == 1)
-			CameraPivot = P;
-		else
-			CameraPivot = FMath::VInterpTo(CameraPivot, P, Dt, 5.5f);
+		CameraPivot = FMath::VInterpTo(CameraPivot, P, Dt, Mode == 2 ? 5.5f : Mode == 1 ? ErlingPlayerCamera::PivotSharpness : 8.f);
+		if (Mode == 1 && C->Avatar)
+		{
+			// Always follow the player's back, also while running back toward the camera; the player steers
+			// against the turning camera.
+			const float Behind = FMath::FindDeltaAngleDegrees(C->Yaw, C->Avatar->GetActorRotation().Yaw);
+			const float MaxStep = ErlingPlayerCamera::MaxFollowRate * Dt;
+			const float Step = FMath::Clamp(Behind * (1.f - FMath::Exp(-ErlingPlayerCamera::FollowSharpness * Dt)), -MaxStep, MaxStep);
+			C->Yaw = FRotator::NormalizeAxis(C->Yaw + Step);
+		}
 		if (Mode == 2)
 		{
 			UpdatePitchCameraLead(Dt);
@@ -101,7 +113,9 @@ float UErlingCameraRig::UpdatePitchCameraLead(float Dt)
 	const AFootballPlayer* Avatar = Controller()->Avatar;
 	if (!Avatar)
 		return PitchCameraLeadX;
-	const bool ShotAction = Avatar->Action == AFootballPlayer::EAction::Kick || Avatar->Action == AFootballPlayer::EAction::Celebrate;
+	// The salto carries its run-up; the in-place celebrations come to rest, so they follow the real velocity.
+	const bool ShotAction = Avatar->Action == AFootballPlayer::EAction::Kick ||
+	    (Avatar->Action == AFootballPlayer::EAction::Celebrate && Avatar->CurrentAnimation == TEXT("Salto_Shoot"));
 	const float LeadVelocityX = ShotAction ? Avatar->EntryVelocity.X : Avatar->GetVelocity().X;
 	const float DesiredLeadX = FMath::Clamp(LeadVelocityX * .22f, -260.f, 260.f);
 	PitchCameraLeadX = FMath::FInterpTo(PitchCameraLeadX, DesiredLeadX, Dt, 4.5f);
@@ -143,7 +157,8 @@ FVector UErlingCameraRig::UpdatePitchShotTarget(float Dt, const FVector& Cam, co
 	                             (Now - PitchShotStarted > .4f && (Velocity.Size2D() < 120.f || Velocity.X * PitchShotGoalX < 0.f))))
 	{
 		PitchShotTracking = false;
-		PitchShotHoldRemaining = M->Referee->Scored ? 1.4f : .65f;
+		// After a goal the view returns a little sooner so the celebration is in frame.
+		PitchShotHoldRemaining = M->Referee->Scored ? .8f : .65f;
 		PitchShotHoldTarget = FMath::Lerp(BallPosition, FVector(PitchShotGoalX, 0, 130), .12f);
 	}
 	FVector DesiredOffset = FVector::ZeroVector;

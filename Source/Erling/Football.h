@@ -22,7 +22,7 @@ public:
  UPROPERTY() float Sensitivity=1.f;
  UPROPERTY() float Volume=.7f;
  UPROPERTY() float EffectsVolume=1.f;
- UPROPERTY() bool ReducedMotion=false;
+ UPROPERTY() bool ReducedMotion=false; // legacy: marks profiles saved with the old "Reduced" camera (mode 1)
  UPROPERTY() bool PauseInSettings=false;
  UPROPERTY() int32 Language=0;
  UPROPERTY() int32 CameraMode=-1;
@@ -122,6 +122,8 @@ public:
  void JumpPressed(); void JumpReleased(); void TurnEditor(float V); void ZoomEditor(float V); void GamepadLookX(float V); void GamepadLookY(float V); void EditorGamepadTurn(float V); void EditorGamepadZoom(float V); void UpdateEditorInput(float Dt);
  void SlidePressed(); void ResetPressed(); void UpdateActions(float Dt); void OnGoal(AFootballPlayer* Scorer); void BeginCelebration(); void CancelPendingActions();
  bool SpaceHeld=false,GoalSpacePending=false,GoalCelebrationUsed=true,PendingShot=false;
+ // Goal celebrations drawn at random (no immediate repeat); a non-empty override pins one (runtime checks).
+ FString CelebrationOverride; int32 LastCelebration=-1;
 	float MoveForward=0,MoveRight=0;
 	FVector SmoothedGamepadMoveInput=FVector::ZeroVector;
  FVector ShotBallStart=FVector::ZeroVector,ShotActorStart=FVector::ZeroVector;
@@ -135,10 +137,12 @@ public:
  bool BallControlHeld=false; void BallControlOn(); void BallControlOff();
  bool bUsingGamepadInput=false;
  bool HasDigitalMoveIntent()const; FVector GetMoveIntentWorld()const;
+ // Camera modes: 0 Free (look input orbits), 1 Player (follows the player's back), 2 Pitch (fixed side view).
+ float MovementYaw()const;
  #if !UE_BUILD_SHIPPING
  void RunChecks(); bool bRunLatestChecks=false; bool bRunProjectChecks=false;
  #endif
- int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false;
+ int32 TestStage_Latest=0; double TestAt=0; FString Report; bool TestDigitalMoveIntent=false; float PlayerCameraStartYaw=0,PlayerCameraTurnTotal=0;
  TArray<FKitCategory> Catalog; TArray<int32> Selection,DraftBefore;
  UPROPERTY(Transient) TObjectPtr<UErlingInterface> UI; float Yaw=0,Pitch=-15; bool Sprint=false; float DemoTime=0; float KickCooldown=0; FString Toast; float ToastUntil=0;
  /** Camera placement and shot tracking (see ErlingCameraRig.h). */

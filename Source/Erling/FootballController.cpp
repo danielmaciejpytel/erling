@@ -85,9 +85,11 @@ void AFootballController::BeginPlay()
 	if (!Saved)
 		Saved = Cast<UFootballSave>(UGameplayStatics::CreateSaveGameObject(UFootballSave::StaticClass()));
 	Saved->Language = FMath::Clamp(Saved->Language, 0, 1);
-	if (Saved->CameraMode < 0 || Saved->CameraMode > 2)
-		Saved->CameraMode = Saved->ReducedMotion ? 1 : 0;
-	Saved->ReducedMotion = Saved->CameraMode == 1;
+	// Mode 1 was the "Reduced" camera (an unsmoothed Free camera); it is now the automatic Player camera.
+	// ReducedMotion only marks those old profiles, which keep their manual camera.
+	if (Saved->CameraMode < 0 || Saved->CameraMode > 2 || (Saved->CameraMode == 1 && Saved->ReducedMotion))
+		Saved->CameraMode = 0;
+	Saved->ReducedMotion = false;
 	Selection = Saved->Appearance;
 	if (!Catalog.IsEmpty())
 	{
@@ -157,8 +159,7 @@ void AFootballController::Forward(float V)
 		// A gamepad's smoothed world intent is applied once, in Tick.
 		if (Avatar->IsMovementLocked() || bUsingGamepadInput)
 			return;
-		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
-		Avatar->AddMovementInput(FRotator(0, MoveYaw, 0).Vector(), V);
+		Avatar->AddMovementInput(FRotator(0, MovementYaw(), 0).Vector(), V);
 	}
 }
 void AFootballController::Right(float V)
@@ -175,13 +176,17 @@ void AFootballController::Right(float V)
 		}
 		if (Avatar->IsMovementLocked() || bUsingGamepadInput)
 			return;
-		const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
-		Avatar->AddMovementInput(FRotationMatrix(FRotator(0, MoveYaw, 0)).GetUnitAxis(EAxis::Y), V);
+		Avatar->AddMovementInput(FRotationMatrix(FRotator(0, MovementYaw(), 0)).GetUnitAxis(EAxis::Y), V);
 	}
+}
+float AFootballController::MovementYaw() const
+{
+	const int32 Mode = Saved ? Saved->CameraMode : 0;
+	return Mode == 2 ? -90.f : Yaw;
 }
 FVector AFootballController::GetMoveIntentWorld() const
 {
-	const float MoveYaw = Saved && Saved->CameraMode == 2 ? -90.f : Yaw;
+	const float MoveYaw = MovementYaw();
 	const FVector F = FRotator(0, MoveYaw, 0).Vector(), R = FRotationMatrix(FRotator(0, MoveYaw, 0)).GetUnitAxis(EAxis::Y);
 	FVector D = F * MoveForward + R * MoveRight;
 	D.Z = 0;
@@ -194,7 +199,7 @@ bool AFootballController::HasDigitalMoveIntent() const
 }
 void AFootballController::LookX(float V)
 {
-	if (Screen == EScreen::Game && Saved && Saved->CameraMode != 2)
+	if (Screen == EScreen::Game && Saved && Saved->CameraMode == 0)
 	{
 		Yaw += V * Saved->Sensitivity * 1.7f;
 		if (Avatar && !FMath::IsNearlyZero(V) && FMath::Abs(FMath::FindDeltaAngleDegrees(Avatar->GetActorRotation().Yaw, Yaw)) > 65)
@@ -203,12 +208,12 @@ void AFootballController::LookX(float V)
 }
 void AFootballController::LookY(float V)
 {
-	if (Screen == EScreen::Game && Saved && Saved->CameraMode != 2)
+	if (Screen == EScreen::Game && Saved && Saved->CameraMode == 0)
 		Pitch = FMath::Clamp(Pitch + V * Saved->Sensitivity, -40.f, 5.f);
 }
 void AFootballController::GamepadLookX(float V)
 {
-	if (Screen == EScreen::Game && Saved && Saved->CameraMode != 2 && !FMath::IsNearlyZero(V))
+	if (Screen == EScreen::Game && Saved && Saved->CameraMode == 0 && !FMath::IsNearlyZero(V))
 	{
 		Yaw += V * Saved->Sensitivity * 120.f * GetWorld()->GetDeltaSeconds();
 		if (Avatar && FMath::Abs(FMath::FindDeltaAngleDegrees(Avatar->GetActorRotation().Yaw, Yaw)) > 65)
@@ -217,7 +222,7 @@ void AFootballController::GamepadLookX(float V)
 }
 void AFootballController::GamepadLookY(float V)
 {
-	if (Screen == EScreen::Game && Saved && Saved->CameraMode != 2 && !FMath::IsNearlyZero(V))
+	if (Screen == EScreen::Game && Saved && Saved->CameraMode == 0 && !FMath::IsNearlyZero(V))
 		Pitch = FMath::Clamp(Pitch + V * Saved->Sensitivity * 90.f * GetWorld()->GetDeltaSeconds(), -40.f, 5.f);
 }
 void AFootballController::SprintOn()

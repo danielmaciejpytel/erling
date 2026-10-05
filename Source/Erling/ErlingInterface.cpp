@@ -166,7 +166,7 @@ void UErlingInterface::HandleAction(EErlingUIAction Action, int32 Index)
     case EErlingUIAction::PreviewPrevious: C->CycleAnimationPreview(-1); break;
     case EErlingUIAction::PreviewNext: C->CycleAnimationPreview(1); break;
     case EErlingUIAction::Language: S->Language=1-S->Language; C->SaveSettings(); break;
-    case EErlingUIAction::Camera: S->CameraMode=(S->CameraMode+1)%3; S->ReducedMotion=S->CameraMode==1; C->CameraRig->CameraPivotInitialized=false; C->CameraRig->PitchCameraLeadX=0; break;
+    case EErlingUIAction::Camera: S->CameraMode=(S->CameraMode+1)%3; C->CameraRig->CameraPivotInitialized=false; C->CameraRig->PitchCameraLeadX=0; break;
     case EErlingUIAction::Quality: S->Quality=(S->Quality+1)%4; C->ApplyQuality(true); break;
     case EErlingUIAction::PauseInSettings: S->PauseInSettings=!S->PauseInSettings; C->SetPause(C->SettingsReturn==Screen::Pause || S->PauseInSettings); break;
     case EErlingUIAction::SaveSettings: C->SaveSettings(); C->ChangeScreen(C->SettingsReturn); break;
@@ -355,7 +355,7 @@ void UErlingInterface::UpdateValues()
         SetText(TEXT("MusicValue"),FString::Printf(TEXT("%.0f%%"),S->Volume*100));
         SetText(TEXT("EffectsValue"),FString::Printf(TEXT("%.0f%%"),S->EffectsVolume*100));
         SetText(TEXT("SensitivityValue"),FString::Printf(TEXT("%.1f"),S->Sensitivity));
-        SetText(TEXT("CameraValue"),S->CameraMode==1?L(TEXT("Reduced"),TEXT("Ograniczony")):S->CameraMode==2?L(TEXT("Pitch"),TEXT("Boiskowy")):L(TEXT("Smooth"),TEXT("Płynny")));
+        SetText(TEXT("CameraValue"),S->CameraMode==1?L(TEXT("Player"),TEXT("Zawodnik")):S->CameraMode==2?L(TEXT("Pitch"),TEXT("Boiskowy")):L(TEXT("Free"),TEXT("Swobodna")));
         const TCHAR* En[]={TEXT("Low"),TEXT("Medium"),TEXT("High"),TEXT("Ultra")};
         const TCHAR* Pl[]={TEXT("Niska"),TEXT("Średnia"),TEXT("Wysoka"),TEXT("Ultra")};
         SetText(TEXT("QualityValue"),L(En[FMath::Clamp(S->Quality,0,3)],Pl[FMath::Clamp(S->Quality,0,3)]));

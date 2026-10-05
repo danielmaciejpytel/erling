@@ -485,6 +485,14 @@ void AFootballController::RunChecks()
     if(TestStage_Latest==171)Forward(1);
     if(TestStage_Latest==172){Forward(0);Right(1);}
     if(TestStage_Latest==173){Forward(-1);Right(0);}
+    // Player camera checks re-send held keys every frame (the engine does): W, then A, then S.
+    if(TestStage_Latest==208){Forward(1);Right(0);}
+    if(TestStage_Latest==209)
+    {
+        Forward(0);Right(-1);
+        if(Avatar){const float Facing=Avatar->GetActorRotation().Yaw;PlayerCameraTurnTotal+=FMath::FindDeltaAngleDegrees(PlayerCameraStartYaw,Facing);PlayerCameraStartYaw=Facing;}
+    }
+    if(TestStage_Latest==210){Forward(-1);Right(0);}
     if(TestStage_Latest>=180&&TestStage_Latest<=187&&Saved)
     {
         // A held stick: InputKey has marked the pad active and the engine re-sends both axes every frame.
@@ -498,7 +506,7 @@ void AFootballController::RunChecks()
     // Stage 203 watches the menu demo after a Pause->Main return from far off the pitch axis; a real receive latches here.
     static bool DemoReceivedAfterFarReturn=false;
     if(TestStage_Latest==203&&DemoPhase==2)DemoReceivedAfterFarReturn=true;
-    if(TestAt==0){if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;else if(FParse::Value(FCommandLine::Get(),TEXT("LatestFromStage="),TestStage_Latest))ChangeScreen(EScreen::Game);TestAt=Now+4;return;}
+    if(TestAt==0){CelebrationOverride=TEXT("Salto_Shoot");if(FParse::Param(FCommandLine::Get(),TEXT("FinishedBallsOnly")))TestStage_Latest=177;else if(FParse::Param(FCommandLine::Get(),TEXT("GamepadMoveOnly")))TestStage_Latest=179;else if(FParse::Param(FCommandLine::Get(),TEXT("TrapCcdOnly")))TestStage_Latest=190;else if(FParse::Param(FCommandLine::Get(),TEXT("FpsClockOnly")))TestStage_Latest=195;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoStateOnly")))TestStage_Latest=202;else if(FParse::Param(FCommandLine::Get(),TEXT("ContactOnly")))TestStage_Latest=156;else if(FParse::Param(FCommandLine::Get(),TEXT("DemoOnly")))TestStage_Latest=46;else if(FParse::Param(FCommandLine::Get(),TEXT("TortureOnly")))TestStage_Latest=123;else if(FParse::Value(FCommandLine::Get(),TEXT("LatestFromStage="),TestStage_Latest))ChangeScreen(EScreen::Game);TestAt=Now+4;return;}
     if(Now<TestAt)return;
     {
         // Stages 52-55 apply one frame of input and judge the next 0.05-0.12 s. The movement integrates the whole
@@ -609,7 +617,23 @@ void AFootballController::RunChecks()
         Check(TEXT("physical_jump_airborne"),Avatar->GetCharacterMovement()->IsFalling());VisiblePose(TEXT("standing_jump_mesh_visible"));Screenshot(TEXT("07_Jump"));Wait=1.f;break;
     case 13:
         Check(TEXT("jump_lands"),!Avatar->GetCharacterMovement()->IsFalling());ResetPlayer();Wait=.1f;break;
-    case 14:break; // Stage kept (the removed fall/get-up check lived here) so later stage numbers and -LatestFromStage selectors stay valid.
+    case 14:
+        {
+            // Random goal celebrations: all four are drawn and the same one never plays twice in a row.
+            TSet<FString> Seen;bool NoRepeat=true,AllCelebrate=true;FString Previous;
+            CelebrationOverride.Empty();
+            for(int32 Draw=0;Draw<80;++Draw)
+            {
+                ResetPlayer();OnGoal(Avatar);JumpPressed();JumpReleased();
+                AllCelebrate&=Avatar->Action==AFootballPlayer::EAction::Celebrate&&GoalCelebrationUsed;
+                NoRepeat&=Avatar->CurrentAnimation!=Previous;Previous=Avatar->CurrentAnimation;Seen.Add(Previous);
+            }
+            CelebrationOverride=TEXT("Salto_Shoot");ResetPlayer();
+            Check(TEXT("random_celebration_starts"),AllCelebrate);
+            Check(TEXT("random_celebration_uses_all_four"),Seen.Num()==4&&Seen.Contains(TEXT("Salto_Shoot"))&&Seen.Contains(TEXT("Dance_Disco"))&&Seen.Contains(TEXT("Dance_Robot"))&&Seen.Contains(TEXT("Meme_Shrug")));
+            Check(TEXT("random_celebration_never_repeats"),NoRepeat);
+            break;
+        }
     case 15:
         ResetPlayer();PlaceBall();FireShot(.5f);
         Check(TEXT("normal_shot_no_special"),Avatar->Action==AFootballPlayer::EAction::Kick);Wait=.45f;break;
@@ -642,7 +666,29 @@ void AFootballController::RunChecks()
     case 23:
         Avatar->PreviewAnimation=true;Avatar->SetAnimation(TEXT("Salto_Shoot"),false);Avatar->AnimationTime=Avatar->Animations.FindRef(TEXT("Salto_Shoot"))->GetPlayLength()*.55f;Avatar->PlaybackRate=0;EditorZoom=.3f;Wait=.5f;break;
     case 24:Screenshot(TEXT("10_FlipClose"));break;
-    case 25:case 26:break; // Stages kept (the removed trip-roll preview lived here) so later stage numbers stay valid.
+    case 25:
+        // An in-place celebration started from a run: it eases the run-up out and is not interruptible by the held key.
+        ChangeScreen(EScreen::Game);ResetPlayer();CelebrationOverride=TEXT("Dance_Disco");Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);
+        OnGoal(Avatar);JumpPressed();JumpReleased();
+        Check(TEXT("goal_dance_celebration_starts"),Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==TEXT("Dance_Disco")&&Avatar->ActionInterruptible&&GoalCelebrationUsed);
+        Check(TEXT("goal_dance_starts_from_the_run"),FMath::IsNearlyEqual(Avatar->ActionVelocity.Size2D(),510.f,8.f));
+        TestPosition=Avatar->GetActorLocation();Wait=.6f;break;
+    case 26:
+        {
+            const float Travel=FVector::Dist2D(TestPosition,Avatar->GetActorLocation());
+            UE_LOG(LogTemp,Display,TEXT("GOAL_DANCE_STOP travel=%f speed=%f"),Travel,Avatar->GetVelocity().Size2D());
+            Screenshot(TEXT("06b_GoalDance"));
+            Check(TEXT("goal_dance_comes_to_rest"),Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==TEXT("Dance_Disco")&&Avatar->GetVelocity().Size2D()<5.f&&Travel<150.f);
+            Forward(1);Check(TEXT("goal_dance_new_movement_ends_it"),Avatar->Action==AFootballPlayer::EAction::None);Forward(0);
+            bool Others=true;
+            for(const TCHAR* Clip:{TEXT("Dance_Robot"),TEXT("Meme_Shrug")})
+            {
+                ResetPlayer();CelebrationOverride=Clip;OnGoal(Avatar);JumpPressed();JumpReleased();
+                Others&=Avatar->Action==AFootballPlayer::EAction::Celebrate&&Avatar->CurrentAnimation==Clip&&Avatar->ActionDuration>1.5f;
+            }
+            Check(TEXT("goal_robot_and_shrug_celebrations_start"),Others);
+            CelebrationOverride=TEXT("Salto_Shoot");ResetPlayer();break;
+        }
     case 27:
         ChangeScreen(EScreen::Game);ResetPlayer();GoalCelebrationUsed=true;Mode->Ball->SetWorldLocation(FVector(1500,1000,22));
         Avatar->GetCharacterMovement()->Velocity=FVector(510,0,0);JumpPressed();JumpReleased();Wait=.22f;break;
@@ -1566,6 +1612,56 @@ void AFootballController::RunChecks()
             StickX(0.f);bUsingGamepadInput=false;SmoothedGamepadMoveInput=FVector::ZeroVector;
         }
         Mode->Referee->Goals=0;ResetPlayer();Mode->ResetBall();Wait=.1f;break;
+    case 206:
+        {
+            // Player camera = Free camera following the player's back. Stage 205 leaves a pad stick value the
+            // engine keeps re-sending; release every key and axis first.
+            FlushPressedKeys();ChangeScreen(EScreen::Game);ResetPlayer();Mode->ResetBall();Mode->Referee->LastShot=-10.f;
+            Mode->Ball->SetWorldLocation(FVector(1500,1000,22),false,nullptr,ETeleportType::TeleportPhysics);
+            Saved->CameraMode=1;CameraRig->CameraPivotInitialized=false;Yaw=0;Pitch=-15;
+            MoveForward=0;MoveRight=0;SmoothedGamepadMoveInput=FVector::ZeroVector;bUsingGamepadInput=false;
+            Avatar->SetActorRotation(FRotator(0,90,0));
+            LookX(10);LookY(10);GamepadLookX(1);GamepadLookY(1);
+            Check(TEXT("camera_player_ignores_look_input"),Yaw==0.f&&Pitch==-15.f);
+            Wait=2.f;break; // a 90 degree swing at the 90 deg/s follow cap, easing in at the end
+        }
+    case 207:
+        {
+            UE_LOG(LogTemp,Display,TEXT("PLAYER_CAMERA standing yaw=%f facing=%f"),Yaw,Avatar->GetActorRotation().Yaw);
+            Check(TEXT("camera_player_settles_behind_back"),FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw,Avatar->GetActorRotation().Yaw))<3.f);
+            Screenshot(TEXT("15_PlayerCamera_Behind"));
+            PlayerCameraStartYaw=Yaw;Wait=1.2f;break; // per tick: W
+        }
+    case 208:
+        {
+            const float RunYaw=Avatar->GetVelocity().Rotation().Yaw;
+            UE_LOG(LogTemp,Display,TEXT("PLAYER_CAMERA forward yaw=%f run_yaw=%f speed=%f"),Yaw,RunYaw,Avatar->GetVelocity().Size2D());
+            Check(TEXT("camera_player_forward_runs_straight"),Avatar->GetVelocity().Size2D()>300.f&&FMath::Abs(FMath::FindDeltaAngleDegrees(PlayerCameraStartYaw,RunYaw))<5.f&&FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw,RunYaw))<5.f);
+            PlayerCameraStartYaw=Avatar->GetActorRotation().Yaw;PlayerCameraTurnTotal=0.f;Wait=1.2f;break; // per tick: A
+        }
+    case 209:
+        {
+            // Holding "left" with the camera on the player's back is a continuous left turn (the camera
+            // follows, so left stays 90 degrees off it): the turn accumulates and the camera trails the facing.
+            const float Lag=FMath::FindDeltaAngleDegrees(Yaw,Avatar->GetActorRotation().Yaw);
+            UE_LOG(LogTemp,Display,TEXT("PLAYER_CAMERA left turned_total=%f camera_lag=%f speed=%f"),PlayerCameraTurnTotal,Lag,Avatar->GetVelocity().Size2D());
+            // ...at the camera's capped follow rate: a gentle arc (90 deg/s), never a spin.
+            Check(TEXT("camera_player_left_keeps_turning_left"),PlayerCameraTurnTotal<-90.f&&PlayerCameraTurnTotal>-300.f&&Lag<0.f&&Lag>-100.f&&Avatar->GetVelocity().Size2D()>400.f);
+            Screenshot(TEXT("16_PlayerCamera_TurnLeft"));
+            PlayerCameraStartYaw=Yaw;Wait=1.2f;break; // per tick: S
+        }
+    case 210:
+        {
+            const float Turned=FMath::Abs(FMath::FindDeltaAngleDegrees(PlayerCameraStartYaw,Yaw));
+            const float RunVsCamera=FMath::FindDeltaAngleDegrees(Yaw,Avatar->GetVelocity().Rotation().Yaw);
+            UE_LOG(LogTemp,Display,TEXT("PLAYER_CAMERA back camera_turned=%f run_vs_camera=%f speed=%f"),Turned,RunVsCamera,Avatar->GetVelocity().Size2D());
+            // Running back: the camera already swings round while "back" is held, at most 90 deg/s
+            // (1.2 s -> 108 degrees, plus one frame of stage timing).
+            Check(TEXT("camera_player_turns_while_running_back"),Turned>30.f&&Turned<=120.f&&Avatar->GetVelocity().Size2D()>300.f);
+            Forward(0);Right(0);MoveForward=0;MoveRight=0;
+            Saved->CameraMode=0;Yaw=0;Pitch=-15;CameraRig->CameraPivotInitialized=false;
+            ResetPlayer();Mode->ResetBall();Wait=.1f;break;
+        }
     default:
         ErlingTestRun::Finish(LatestRun,TEXT("ERLING_LATEST_CHECKS_COMPLETE"),Report,Report.Contains(TEXT(": FAIL")));return;
     }

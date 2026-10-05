@@ -155,9 +155,12 @@ void AFootballPlayer::UpdateAction(float Dt)
 			const float U = FMath::Clamp((ActionElapsed - .5f * Dt) / ActionDuration, 0.f, 1.f);
 			ActionVelocity = EntryVelocity.GetSafeNormal() * SlideDistance * 2.f / ActionDuration * (1.f - U);
 		}
-		else if (Action == EAction::Celebrate)
+		else if (Action == EAction::Celebrate && CurrentAnimation == TEXT("Salto_Shoot"))
 			// The goal salto carries the run-up through the flip, easing off towards the landing.
 			ActionVelocity = EntryVelocity * FMath::Lerp(1.15f, .75f, FMath::SmoothStep(.65f, 1.f, ActionElapsed / ActionDuration));
+		else if (Action == EAction::Celebrate)
+			// In-place celebrations bring the run-up to rest before the dance takes over.
+			ActionVelocity = EntryVelocity * (1.f - FMath::SmoothStep(0.f, .35f, ActionElapsed));
 		else if (Action == EAction::Kick)
 			ActionVelocity = EntryVelocity * FMath::Lerp(1.f, .45f, FMath::SmoothStep(0.f, .3f, ActionElapsed));
 		else
@@ -332,18 +335,37 @@ void AFootballController::BeginCelebration()
 	if (!Avatar->CanAct())
 		return;
 	GoalSpacePending = false;
-	// The only goal celebration is the salto clip, entered at the point the salto shot used to start from.
-	// The flip is root-locked and carries the run-up (at least a short hop forward when standing).
-	constexpr float Rate = 2.6f, StartFraction = .36f * .43f;
+	static const TCHAR* const Celebrations[] = {TEXT("Salto_Shoot"), TEXT("Dance_Disco"), TEXT("Dance_Robot"), TEXT("Meme_Shrug")};
+	constexpr int32 CelebrationCount = UE_ARRAY_COUNT(Celebrations);
+	int32 Choice = FMath::RandRange(0, CelebrationCount - 1);
+	if (Choice == LastCelebration)
+		Choice = (Choice + FMath::RandRange(1, CelebrationCount - 1)) % CelebrationCount;
+	for (int32 Index = 0; Index < CelebrationCount; ++Index)
+		if (CelebrationOverride == Celebrations[Index])
+			Choice = Index;
+	const FString Clip = Celebrations[Choice];
 	FVector Entry = Avatar->GetVelocity();
 	Entry.Z = 0;
-	if (Avatar->StartAction(AFootballPlayer::EAction::Celebrate, TEXT("Salto_Shoot"), Rate, StartFraction, false))
+	if (Clip == TEXT("Salto_Shoot"))
 	{
+		// The salto is entered at the point the salto shot used to start from. The flip is root-locked
+		// and carries the run-up (at least a short hop forward when standing).
+		constexpr float Rate = 2.6f, StartFraction = .36f * .43f;
+		if (!Avatar->StartAction(AFootballPlayer::EAction::Celebrate, Clip, Rate, StartFraction, false))
+			return;
 		const float Speed = FMath::Clamp(Entry.Size2D(), 320.f, 765.f);
 		Avatar->EntryVelocity = (Entry.IsNearlyZero() ? Avatar->GetActorForwardVector() : Entry.GetSafeNormal()) * Speed;
 		Avatar->ActionVelocity = Avatar->EntryVelocity * 1.15f;
-		GoalCelebrationUsed = true;
 	}
+	else
+	{
+		// The dances and the shrug play in place: the run-up eases out and a new movement press ends them.
+		if (!Avatar->StartAction(AFootballPlayer::EAction::Celebrate, Clip, 1.f, 0.f, true))
+			return;
+		Avatar->ActionVelocity = Avatar->EntryVelocity;
+	}
+	LastCelebration = Choice;
+	GoalCelebrationUsed = true;
 }
 void AFootballController::CancelPendingActions()
 {

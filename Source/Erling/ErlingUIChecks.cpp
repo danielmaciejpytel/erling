@@ -160,7 +160,7 @@ void UErlingInterface::RunUIChecks()
         Check(TEXT("music_slider"),FMath::IsNearlyEqual(C->Saved->Volume,.25f)&&C->AudioVideo->Music&&FMath::IsNearlyEqual(C->AudioVideo->Music->VolumeMultiplier,.25f));
         Check(TEXT("effects_slider"),FMath::IsNearlyEqual(C->Saved->EffectsVolume,.55f));Check(TEXT("sensitivity_slider"),FMath::IsNearlyEqual(C->Saved->Sensitivity,1.65f,1.e-4f));
         Click(TEXT("LanguageButton"));{auto PlayLabel=Texts.FindRef(TEXT("PlayButtonLabel"));Check(TEXT("english_translation"),C->Saved->Language==0&&PlayLabel&&PlayLabel->GetText().ToString()==TEXT("PLAY"));}Click(TEXT("LanguageButton"));
-        const int32 Camera=C->Saved->CameraMode;Click(TEXT("CameraButton"));Check(TEXT("camera_cycle"),C->Saved->CameraMode==(Camera+1)%3);C->Saved->CameraMode=Camera;C->Saved->ReducedMotion=Camera==1;
+        const int32 Camera=C->Saved->CameraMode;Click(TEXT("CameraButton"));Check(TEXT("camera_cycle"),C->Saved->CameraMode==(Camera+1)%3);C->Saved->CameraMode=Camera;
         Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_on"),C->Saved->PauseInSettings&&C->IsPaused());Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_off"),!C->Saved->PauseInSettings&&!C->IsPaused());RefreshScreen();break;}
     case 9:Shot(TEXT("04_Settings_PL"));break;
     case 10:Click(TEXT("SaveSettingsButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("settings_persisted"),Loaded&&FMath::IsNearlyEqual(Loaded->Volume,.25f)&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.55f)&&FMath::IsNearlyEqual(Loaded->Sensitivity,1.65f,1.e-4f));}Click(TEXT("CreditsButton"));break;
