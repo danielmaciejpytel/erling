@@ -22,7 +22,6 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
     float Time=0,PreviousTime=0,Alpha=1;
     bool PhysicalJump=false;
     bool BackHair=false;
-    bool BodyUnderShorts=false;
     bool Shirt=false;
     bool BunAccessory=false;
     bool RubberAccessory=false;
@@ -56,8 +55,6 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
                 Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_bun");
             RubberAccessory=Component&&Component->GetSkeletalMeshAsset()&&
                 Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_rubber");
-            BodyUnderShorts=Component&&Component->GetSkeletalMeshAsset()&&
-                Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_body");
             Shirt=Component&&Component->GetSkeletalMeshAsset()&&
                 Component->GetSkeletalMeshAsset()->GetFName()==TEXT("SK_shirt");
             if(BackHair)
@@ -300,27 +297,6 @@ struct FErlingAnimProxy final : public FAnimInstanceProxy
                 const FTransform& Rest=Bones.GetRefPoseTransform(Index);
                 Output.Pose[Index].SetRotation(FQuat::Slerp(Rest.GetRotation(),Output.Pose[Index].GetRotation(),.2f).GetNormalized());
                 Output.Pose[Index].SetTranslation(FMath::Lerp(Rest.GetTranslation(),Output.Pose[Index].GetTranslation(),.2f));
-            }
-        }
-        if(BodyUnderShorts)
-        {
-            const FBoneContainer& Bones=Output.Pose.GetBoneContainer();
-            // Give the skin clearance below the shorts without removing geometry.
-            // Compensate direct children so knee/foot positions and the upper body
-            // retain their animation transforms; only vertices weighted to these
-            // bones receive the smaller skin envelope.
-            for(FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
-            {
-                const FName Name=Bones.GetReferenceSkeleton().GetBoneName(Bones.MakeMeshPoseIndex(Index).GetInt());
-                if(Name!=TEXT("pelvis")&&Name!=TEXT("thigh_l")&&Name!=TEXT("thigh_r"))continue;
-                const float ClearanceScale=Name==TEXT("pelvis")?.90f:.92f;
-                Output.Pose[Index].SetScale3D(Output.Pose[Index].GetScale3D()*ClearanceScale);
-                for(FCompactPoseBoneIndex Child:Output.Pose.ForEachBoneIndex())
-                {
-                    if(Bones.GetParentBoneIndex(Child)!=Index)continue;
-                    Output.Pose[Child].SetTranslation(Output.Pose[Child].GetTranslation()/ClearanceScale);
-                    Output.Pose[Child].SetScale3D(Output.Pose[Child].GetScale3D()/ClearanceScale);
-                }
             }
         }
         if(BackHair&&HairJointSwing.Num()==HairSpringCount&&HairJointTurn.Num()==HairSpringCount)

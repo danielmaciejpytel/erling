@@ -314,6 +314,22 @@ void AFootballPlayer::ApplyKit(const TArray<int32>& Values, const TArray<FKitCat
 				Pieces.Add(P);
 			}
 	}
+	// Layers hidden under a garment move inward (morphs authored in Erling_Rig.blend), fading
+	// out at the garment's openings so everything visible keeps its shape.
+	auto FindPiece = [this](const TCHAR* Name) -> USkeletalMeshComponent*
+	{
+		for (auto* Piece : Pieces)
+			if (Piece->GetSkeletalMeshAsset()->GetFName() == Name)
+				return Piece;
+		return nullptr;
+	};
+	USkeletalMeshComponent* Shorts = FindPiece(TEXT("SK_pants"));
+	const float Shirt = FindPiece(TEXT("SK_shirt")) ? 1.f : 0.f;
+	GetMesh()->SetMorphTarget(TEXT("UnderShorts"), Shorts ? 1.f : 0.f);
+	GetMesh()->SetMorphTarget(TEXT("UnderShirt"), Shirt);
+	GetMesh()->SetMorphTarget(TEXT("UnderShoes"), FindPiece(TEXT("SK_shoe")) ? 1.f : 0.f);
+	if (Shorts)
+		Shorts->SetMorphTarget(TEXT("UnderShirt"), Shirt);
 }
 void AFootballPlayer::Landed(const FHitResult& Hit)
 {
