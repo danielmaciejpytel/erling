@@ -1,0 +1,29 @@
+Erling (Working title) - proprietary licence, all rights reserved
+
+Copyright (c) 2026 Daniel Maciej Pytel. All rights reserved.
+
+This project is the original work of its author, Daniel Maciej Pytel: the source code,
+3D models, textures, UI art and glyphs, animations, the Dantes Toon typeface and the design
+of the game. It is a personal portfolio project, and the author may develop it further
+and release it commercially in the future.
+
+No licence or other right is granted to anyone except the author. In particular, without
+the author's prior written permission you may not copy, modify, merge, publish, distribute,
+sublicense, sell, host or re-upload this project or any part of it, make derivative works
+from it, use it to train machine-learning models, or use the name, the character or the
+Dantes Toon typeface in any other work.
+
+Permission is given only to view the repository and to evaluate the project privately,
+for example as part of a review of the author's work.
+
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. TO THE
+EXTENT PERMITTED BY LAW, THE AUTHOR IS NOT LIABLE FOR ANY CLAIM OR DAMAGE ARISING FROM IT.
+
+Third-party components
+----------------------
+These are not covered by the grant above and stay under their own licences:
+
+- Unreal Engine (Epic Games, Inc.) is used under the Unreal Engine End User License Agreement.
+  The engine itself is not part of this repository.
+
+Contact: Daniel Maciej Pytel (danielmaciejpytel on GitHub)
