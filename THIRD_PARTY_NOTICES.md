@@ -13,7 +13,8 @@ Erling uses Unreal Engine by Epic Games, Inc. under the
 [Unreal Engine End User License Agreement](https://www.unrealengine.com/eula/unreal).
 The project descriptor targets Unreal Engine 5.8. The editor target has been
 built locally with 5.8.4. A clean local clone was built and run on 2026-11-16
-using locally supplied Git LFS objects. A packaged release has not been verified.
+using locally supplied Git LFS objects. The Windows x64 Shipping package for
+0.1.0 was built on 2026-11-16; its visual check was confirmed by the maintainer.
 
 The tracked repository contains project code and assets, not an Unreal Engine
 installation. Users must obtain the engine separately under its own terms.

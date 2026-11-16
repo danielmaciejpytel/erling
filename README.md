@@ -9,6 +9,7 @@ A stylized football playground and modular character creator in Unreal Engine.</
   <img src="https://img.shields.io/badge/Unreal_Engine-5.8-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Unreal Engine 5.8">
   <img src="https://img.shields.io/badge/Windows-C%2B%2B-F4EEDF?style=for-the-badge&labelColor=2D3F4E" alt="Windows / C++">
   <img src="https://img.shields.io/badge/status-portfolio_prototype-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Portfolio prototype">
+  <img src="https://img.shields.io/badge/version-0.1.0-F4EEDF?style=for-the-badge&labelColor=2D3F4E" alt="Version 0.1.0">
 </p>
 
 <p align="center">
@@ -74,6 +75,15 @@ The character editor also supports drag-to-rotate, `Q` / `E` rotation and mouse-
 The pitch, gameplay state and core interaction systems are created and controlled from the runtime code, while the character, animations, materials, audio and map assets live under `Content/Erling`.
 
 ## Quick start
+
+1. Download **[Erling 0.1.0 for Windows x64](https://github.com/danielmaciejpytel/erling/releases/download/v0.1.0/erling_0.1.0_windows_x64.zip)** from [Releases](https://github.com/danielmaciejpytel/erling/releases/tag/v0.1.0).
+2. Extract the **entire ZIP** to a folder on your computer.
+3. Open that folder and run **`Erling.exe`**. Keep the `Engine` and `Erling` folders beside it.
+4. Choose **Play** to enter the pitch, or open the character creator to customize your player.
+
+The download is a standalone **Windows 64-bit Shipping build**. Unreal Engine, Visual Studio and Git are not required to play. If Windows reports missing Microsoft Visual C++ runtime components, run `Engine/Extras/Redist/en-us/vc_redist.x64.exe` included in the extracted folder, then launch the game again.
+
+## Build from source
 
 - Windows 64-bit, Git and Git LFS.
 - Unreal Engine **5.8**; the local engine installation used for this maintenance work is **5.8.4**. Other engine versions have not been verified.
@@ -143,4 +153,7 @@ With an initial 20 FPS cap, the basic checks passed **45/46**: `sprint_dribble_c
 failed. The same assertion also failed on the pre-change runner (**43/44**).
 This remains a known low-FPS issue. Later graphics checks change the FPS cap.
 Experimental engine toolsets also log Python initialization errors in the inspected
-installation. A packaged Shipping build and physical controller have not been verified.
+installation. The **0.1.0 Windows x64 Shipping package** built successfully; its
+visual check was confirmed by the author. The release-source checks passed
+**46/46** (basic) and **86/86** (UI) in the editor runtime. A clean Windows machine
+and a physical controller have not been verified.

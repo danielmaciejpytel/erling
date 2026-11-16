@@ -9,6 +9,7 @@ Stylizowany piłkarski plac zabaw i modułowy kreator postaci w Unreal Engine.</
   <img src="https://img.shields.io/badge/Unreal_Engine-5.8-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Unreal Engine 5.8">
   <img src="https://img.shields.io/badge/Windows-C%2B%2B-F4EEDF?style=for-the-badge&labelColor=2D3F4E" alt="Windows / C++">
   <img src="https://img.shields.io/badge/status-prototyp_portfolio-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Prototyp portfolio">
+  <img src="https://img.shields.io/badge/version-0.1.0-F4EEDF?style=for-the-badge&labelColor=2D3F4E" alt="Wersja 0.1.0">
 </p>
 
 <p align="center">
@@ -74,6 +75,15 @@ Kod runtime tworzy i kontroluje elementy boiska oraz stan gry; zaimportowane
 zasoby znajdują się w `Content/Erling`, a mapa w `Content/Maps`.
 
 ## Szybki start
+
+1. Pobierz **[Erling 0.1.0 dla Windows x64](https://github.com/danielmaciejpytel/erling/releases/download/v0.1.0/erling_0.1.0_windows_x64.zip)** z [Releases](https://github.com/danielmaciejpytel/erling/releases/tag/v0.1.0).
+2. Rozpakuj **całą paczkę ZIP** do folderu na komputerze.
+3. Otwórz ten folder i uruchom **`Erling.exe`**. Katalogi `Engine` i `Erling` pozostaw obok pliku EXE.
+4. Wybierz **Graj**, aby wejść na boisko, lub otwórz kreator postaci i dostosuj zawodnika.
+
+Paczka jest samodzielnym buildem **Shipping dla Windows 64-bit**. Do gry nie potrzebujesz Unreal Engine, Visual Studio ani Gita. Jeśli Windows zgłosi brak składników Microsoft Visual C++, uruchom dołączony `Engine/Extras/Redist/en-us/vc_redist.x64.exe`, a następnie ponownie włącz grę.
+
+## Budowanie ze źródeł
 
 Wymagania: Windows 64-bit, Git i Git LFS, Unreal Engine **5.8** (sprawdzono
 **5.8.4**) oraz Visual Studio 2022 z pakietem **Game development with C++**, MSVC
@@ -166,4 +176,7 @@ Przy początkowym limicie 20 FPS wynik wynosi **45/46**: nie przechodzi
 `sprint_dribble_controlled`. Ta sama asercja nie przechodziła przed poprawką
 (**43/44**). To znany problem przy niskim FPS. Późniejsze testy grafiki zmieniają
 limit klatek. Eksperymentalne toolsety silnika zgłaszają błędy inicjalizacji Pythona.
-Nie zweryfikowano paczki Shipping ani fizycznego kontrolera.
+Paczka **Shipping 0.1.0 dla Windows x64** została zbudowana, a autor potwierdził
+ją wizualnie. Testy źródeł wydania w runtime edytora zaliczyły **46/46**
+(podstawowe) i **86/86** (UI). Nie zweryfikowano czystego systemu Windows
+ani fizycznego kontrolera.
