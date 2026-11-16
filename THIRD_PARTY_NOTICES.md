@@ -55,12 +55,12 @@ the partial `ErlingBuildUI -UpdateCredits` authoring command maintains it.
 - **Permission status:** no permission covering this project's use and distribution
   was supplied or located in the inspected project records.
 
-**Maintenance status (2026-11-16): deferred by the maintainer for the current
-local development phase.** The search found no public licence granting use in a
-game and redistribution through GitHub. This records the decision to stop further
-clearance work for now; it is not permission or a publication clearance. The audio
-is retained unchanged. Reopen this item before public distribution unless the
-required permissions have been obtained or the recording excluded.
+**Maintenance status (2026-11-16): publication requested by the maintainer;
+permission remains unconfirmed.** The earlier deferral applied to local
+development. The maintainer subsequently requested public repository visibility
+while retaining the audio unchanged. No public licence granting use in a game
+and redistribution through GitHub was found during the review. This publication
+decision does not establish permission or resolve the outstanding rights issue.
 
 The song and recording are not claimed as the maintainer's work. The listing is
 identification only, not a licence. Publishing the recording in a repository,
