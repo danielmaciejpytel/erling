@@ -119,3 +119,7 @@ Source/ErlingUIEditor/UI_EDITING.md
 /Source/ErlingUIEditor/Python/
 /Source/ErlingUIEditor/*.cjs
 .clang-format
+
+# Machine-local assistant settings
+/CLAUDE.local.md
+/.claude/

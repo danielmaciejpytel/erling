@@ -5,6 +5,10 @@
   "Description": "Erling \u2014 character creator and football playground",
   "Plugins": [
     {
+      "Name": "AndroidFileServer",
+      "Enabled": false
+    },
+    {
       "Name": "PythonScriptPlugin",
       "Enabled": true,
       "TargetAllowList": [

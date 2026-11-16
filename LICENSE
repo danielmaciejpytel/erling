@@ -1,29 +1,63 @@
-Erling (Working title) - proprietary licence, all rights reserved
+Erling - proprietary portfolio evaluation licence
 
-Copyright (c) 2026 Daniel Maciej Pytel. All rights reserved.
+Copyright (c) 2026 Daniel Maciej Pytel. All rights reserved, except for the limited
+permissions expressly stated below.
 
-This project is the original work of its author, Daniel Maciej Pytel: the source code,
-3D models, textures, UI art and glyphs, animations, the Dantes Toon typeface and the design
-of the game. It is a personal portfolio project, and the author may develop it further
-and release it commercially in the future.
+1. Scope
 
-No licence or other right is granted to anyone except the author. In particular, without
-the author's prior written permission you may not copy, modify, merge, publish, distribute,
-sublicense, sell, host or re-upload this project or any part of it, make derivative works
-from it, use it to train machine-learning models, or use the name, the character or the
-Dantes Toon typeface in any other work.
+This licence applies only to the code, artwork, models, textures, animations,
+typeface, documentation and other contributions in this project to the extent
+that Daniel Maciej Pytel owns or is entitled to license the relevant rights.
+It does not claim ownership of third-party material or create exclusive rights
+in material that is not protected by applicable law.
 
-Permission is given only to view the repository and to evaluate the project privately,
-for example as part of a review of the author's work.
+Erling is a personal portfolio project. Public access to its repository does
+not make it open-source software or dedicate its contents to the public domain.
+The author may continue development and release the project commercially.
 
-THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. TO THE
-EXTENT PERMITTED BY LAW, THE AUTHOR IS NOT LIABLE FOR ANY CLAIM OR DAMAGE ARISING FROM IT.
+2. Limited evaluation permission
 
-Third-party components
-----------------------
-These are not covered by the grant above and stay under their own licences:
+You may view and inspect the author's contributions and make a local copy,
+compile and run them solely for private, non-commercial evaluation of the
+author's work. You may make local changes strictly necessary for that evaluation.
+Keep this licence and applicable notices with any permitted copies.
 
-- Unreal Engine (Epic Games, Inc.) is used under the Unreal Engine End User License Agreement.
-  The engine itself is not part of this repository.
+This permission does not license Unreal Engine or any third-party material.
+You must obtain any independently required rights for those components.
 
-Contact: Daniel Maciej Pytel (danielmaciejpytel on GitHub)
+3. Reserved rights
+
+Except as permitted above, by applicable law, or by separately applicable
+hosting terms, the author's prior written permission is required to modify,
+reuse, merge, publish, distribute, sublicense, sell, host or re-upload the
+author's contributions, create derivative works from them, or use them to train
+machine-learning models. No permission is granted to reuse the project's
+character or the Dantes Toon typeface in another work.
+
+No trademark, personality, endorsement or sponsorship rights are granted.
+Third-party names and marks remain subject to their respective owners' rights.
+
+4. GitHub hosting
+
+Nothing in this licence restricts rights separately granted under the applicable
+GitHub Terms of Service, including viewing and forking a public repository
+through GitHub's functionality. Restrictions in this file do not override
+those terms, including any separately applicable data-use permissions.
+
+5. Third-party material and provenance
+
+Third-party material is excluded from this licence and remains subject to its
+own terms. See THIRD_PARTY_NOTICES.md for identified components, author-provided
+provenance and unresolved permissions. A credit, a download described as free,
+or inclusion in this repository is not a grant of rights to third-party material.
+Unresolved entries must not be treated as cleared for public distribution.
+
+6. Disclaimer
+
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NON-INFRINGEMENT. TO THE EXTENT PERMITTED BY LAW, THE AUTHOR IS NOT
+LIABLE FOR CLAIMS, DAMAGES OR OTHER LIABILITY ARISING FROM THE PROJECT OR ITS USE.
+
+Contact: Daniel Maciej Pytel
+https://github.com/danielmaciejpytel

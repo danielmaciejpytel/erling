@@ -1,5 +1,6 @@
 #include "ErlingBuildUICommandlet.h"
 #include "ErlingInterface.h"
+#include "ErlingCredits.h"
 #include "Modules/ModuleManager.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintFactory.h"
@@ -44,6 +45,41 @@ public:
     int32 Serial=0;
     int32 Missing=0;
     explicit FLayout(UWidgetTree* InTree):Tree(InTree) {}
+    bool UpdateCredits()
+    {
+        auto* Credits=Cast<UCanvasPanel>(Tree->FindWidget(TEXT("CreditsPanel")));
+        auto* Back=Tree->FindWidget(TEXT("CreditsBackButton"));
+        auto* Link=Tree->FindWidget(TEXT("LinkedInButton"));
+        auto* PanelSlot=Credits?Cast<UCanvasPanelSlot>(Credits->Slot):nullptr;
+        auto* BackSlot=Back?Cast<UCanvasPanelSlot>(Back->Slot):nullptr;
+        auto* LinkSlot=Link?Cast<UCanvasPanelSlot>(Link->Slot):nullptr;
+        if(!PanelSlot||!BackSlot||!LinkSlot||Back->GetParent()!=Credits||Link->GetParent()!=Credits)
+        {
+            UE_LOG(LogTemp,Error,TEXT("Credits update requires the existing credits panel and buttons."));return false;
+        }
+        const FVector2D OldSize=PanelSlot->GetSize();
+        const float Top=LinkSlot->GetPosition().Y+LinkSlot->GetSize().Y+24.f;
+        const float Width=OldSize.X-96.f;
+        auto* Notice=Cast<UTextBlock>(Tree->FindWidget(TEXT("EpicCredits")));
+        if(!Notice) Notice=Make<UTextBlock>(TEXT("EpicCredits"));
+        if(Notice->GetParent()) Notice->RemoveFromParent();
+        Notice->SetText(FText::FromString(ErlingCredits::EpicNotice));
+        Notice->SetFont(FSlateFontInfo(LoadObject<UFont>(nullptr,TEXT("/Engine/EngineFonts/Roboto.Roboto")),16,FName(TEXT("Regular"))));
+        Notice->SetColorAndOpacity(White);
+        Notice->SetWrapTextAt(Width);
+        Notice->SetAutoWrapText(true);
+        At(Credits,Notice,48.f,Top,Width,170.f);
+        BackSlot->SetPosition(FVector2D(BackSlot->GetPosition().X,Top+190.f));
+        const FVector2D NewSize(OldSize.X,BackSlot->GetPosition().Y+BackSlot->GetSize().Y+46.f);
+        // Resize only the full-panel decorative images; preserve every other designer edit.
+        for(UWidget* Child:Credits->GetAllChildren())
+            if(Cast<UImage>(Child))
+                if(auto* Slot=Cast<UCanvasPanelSlot>(Child->Slot))
+                    if(Slot->GetPosition().IsNearlyZero()&&Slot->GetSize().Equals(OldSize,1.f)) Slot->SetSize(NewSize);
+        PanelSlot->SetSize(NewSize);
+        UE_LOG(LogTemp,Display,TEXT("ERLING_CREDITS: legal notice added; panel=%.0fx%.0f"),NewSize.X,NewSize.Y);
+        return true;
+    }
     template<class T> T* Make(const FString& Name=TEXT(""))
     {
         const FName WidgetName=Name.IsEmpty()?MakeUniqueObjectName(Tree,T::StaticClass(),*FString::Printf(TEXT("Element_%03d"),++Serial)):FName(*Name);
@@ -289,6 +325,7 @@ public:
         Button(Credits,TEXT("GitHubButton"),EErlingUIAction::GitHub,TEXT("GitHub"),TEXT("GitHub"),TEXT(""),338,378,290,70);
         Button(Credits,TEXT("LinkedInButton"),EErlingUIAction::LinkedIn,TEXT("LinkedIn"),TEXT("LinkedIn"),TEXT(""),38,462,590,70);
         Button(Credits,TEXT("CreditsBackButton"),EErlingUIAction::Back,TEXT("Back"),TEXT("Wstecz"),TEXT("T_UI_Icon_ArrowLeft_White"),38,592,300,74);
+        if(!UpdateCredits()) ++Missing;
 
         auto* Toast=Canvas(Root,TEXT("ToastPanel"),980,62,830,72);
         Image(Toast,TEXT("T_UI_Toast_Backplate"),0,0,830,72);
@@ -309,13 +346,18 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
     UWidgetBlueprint* Blueprint=FPackageName::DoesPackageExist(PackageName)?LoadObject<UWidgetBlueprint>(nullptr,*(PackageName+TEXT(".WBP_ErlingInterface"))):nullptr;
     const bool UpdateHUD=FParse::Param(*Params,TEXT("UpdateHUD"));
     const bool UpdateHint=FParse::Param(*Params,TEXT("UpdateCharacterHint"));
-    const bool PartialUpdate=UpdateHUD||UpdateHint;
+    const bool UpdateCredits=FParse::Param(*Params,TEXT("UpdateCredits"));
+    const bool PartialUpdate=UpdateHUD||UpdateHint||UpdateCredits;
+    if(int32(UpdateHUD)+int32(UpdateHint)+int32(UpdateCredits)>1) { UE_LOG(LogTemp,Error,TEXT("Choose one partial update mode."));return 1; }
     if(PartialUpdate && (!Blueprint || !Blueprint->WidgetTree)) { UE_LOG(LogTemp,Error,TEXT("Partial update requires an existing interface."));return 1; }
     if (Blueprint && !PartialUpdate && !FParse::Param(*Params,TEXT("Replace"))) { UE_LOG(LogTemp,Error,TEXT("Designer asset exists. Refusing to overwrite; archive it and use -Replace explicitly."));return 1; }
     FString ManifestPath;
-    if(!FParse::Value(*Params,TEXT("Manifest="),ManifestPath)) { UE_LOG(LogTemp,Error,TEXT("Pass -Manifest=<asset_manifest.json>"));return 1; }
     FString Json;TSharedPtr<FJsonObject> Manifest;
-    if(!FFileHelper::LoadFileToString(Json,*ManifestPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Manifest)) return 1;
+    if(!UpdateCredits)
+    {
+        if(!FParse::Value(*Params,TEXT("Manifest="),ManifestPath)) { UE_LOG(LogTemp,Error,TEXT("Pass -Manifest=<asset_manifest.json>"));return 1; }
+        if(!FFileHelper::LoadFileToString(Json,*ManifestPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Manifest)) return 1;
+    }
     if(!Blueprint)
     {
         auto* Factory=NewObject<UWidgetBlueprintFactory>(); Factory->ParentClass=UErlingInterface::StaticClass();
@@ -325,8 +367,9 @@ int32 UErlingBuildUICommandlet::Main(const FString& Params)
     else if(!PartialUpdate && Blueprint->WidgetTree) Blueprint->WidgetTree->Rename(nullptr,GetTransientPackage(),REN_DontCreateRedirectors|REN_NonTransactional);
     if(!PartialUpdate || !Blueprint->WidgetTree) Blueprint->WidgetTree=NewObject<UWidgetTree>(Blueprint,TEXT("WidgetTree"),RF_Transactional);
     ErlingUIAuthoring::FLayout Layout(Blueprint->WidgetTree);
-    for(auto Value:Manifest->GetArrayField(TEXT("assets"))) Layout.Assets.Add(Value->AsObject()->GetStringField(TEXT("name")),Value->AsObject());
-    if(UpdateHint) { if(!Layout.UpdateCharacterHint()) return 1; }
+    if(Manifest) for(auto Value:Manifest->GetArrayField(TEXT("assets"))) Layout.Assets.Add(Value->AsObject()->GetStringField(TEXT("name")),Value->AsObject());
+    if(UpdateCredits) { if(!Layout.UpdateCredits()) return 1; }
+    else if(UpdateHint) { if(!Layout.UpdateCharacterHint()) return 1; }
     else if(UpdateHUD) Layout.UpdateHUD(); else Layout.Build();
     if(Layout.Missing) return 1;
     TArray<UWidget*> DesignerWidgets;Blueprint->WidgetTree->GetAllWidgets(DesignerWidgets);

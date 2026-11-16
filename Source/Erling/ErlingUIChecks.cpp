@@ -1,4 +1,5 @@
 #include "ErlingInterface.h"
+#include "ErlingCredits.h"
 
 #if !UE_BUILD_SHIPPING
 #include "Football.h"
@@ -96,9 +97,27 @@ void UErlingInterface::RunUIChecks()
         for(const auto& Entry:Texts)
         {
             const FString Value=Entry.Value->GetText().ToString();
+            // Epic's legal notice keeps its prescribed case; all game labels remain uppercase.
+            if(Entry.Key==FName(TEXT("EpicCredits"))&&Value==ErlingCredits::EpicNotice) continue;
             if(!Value.IsEmpty()&&Value!=Value.ToUpper()){bUppercase=false;break;}
         }
         Check(TEXT("visible_text_uppercase"),bUppercase);
+    };
+    auto CreditsNotice=[this,&Check]()
+    {
+        auto* Notice=Cast<UTextBlock>(GetWidgetFromName(TEXT("EpicCredits")));
+        auto* Back=GetWidgetFromName(TEXT("CreditsBackButton"));
+        Check(TEXT("epic_credits_exact_wording"),Notice&&Notice->GetText().ToString()==ErlingCredits::EpicNotice);
+        if(!Notice||!Back) { Check(TEXT("epic_credits_readable_without_overlap"),false);return; }
+        const auto G=Notice->GetCachedGeometry();
+        const auto BackG=Back->GetCachedGeometry();
+        const auto Root=GetCachedGeometry();
+        const FVector2D A=Root.AbsoluteToLocal(G.LocalToAbsolute(FVector2D::ZeroVector));
+        const FVector2D Z=Root.AbsoluteToLocal(G.LocalToAbsolute(G.GetLocalSize()));
+        const FVector2D BackA=Root.AbsoluteToLocal(BackG.LocalToAbsolute(FVector2D::ZeroVector));
+        Check(TEXT("epic_credits_readable_without_overlap"),G.GetLocalSize().X>0&&G.GetLocalSize().Y>0&&
+            Notice->GetDesiredSize().Y<=G.GetLocalSize().Y+1&&A.X>=0&&A.Y>=0&&
+            Z.X<=Root.GetLocalSize().X+1&&Z.Y<=BackA.Y&&Z.Y<=Root.GetLocalSize().Y+1);
     };
     auto Bounds=[this,&Check](const TCHAR* Name){
         const auto Root=GetCachedGeometry();const FVector2D Size=Root.GetLocalSize();int32 Count=0;bool Valid=true;
@@ -164,7 +183,7 @@ void UErlingInterface::RunUIChecks()
         Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_on"),C->Saved->PauseInSettings&&C->IsPaused());Click(TEXT("PauseSettingButton"));Check(TEXT("pause_setting_off"),!C->Saved->PauseInSettings&&!C->IsPaused());RefreshScreen();break;}
     case 9:Shot(TEXT("04_Settings_PL"));break;
     case 10:Click(TEXT("SaveSettingsButton"));{auto* Loaded=Cast<UFootballSave>(UGameplayStatics::LoadGameFromSlot(TEXT("ErlingProfile_Test"),0));Check(TEXT("settings_persisted"),Loaded&&FMath::IsNearlyEqual(Loaded->Volume,.25f)&&FMath::IsNearlyEqual(Loaded->EffectsVolume,.55f)&&FMath::IsNearlyEqual(Loaded->Sensitivity,1.65f,1.e-4f));}Click(TEXT("CreditsButton"));break;
-    case 11:UppercaseText();Check(TEXT("credits_screen"),C->Screen==S::Credits);Bounds(TEXT("credits_bounds"));Shot(TEXT("05_Credits_PL"));break;
+    case 11:UppercaseText();Check(TEXT("credits_screen"),C->Screen==S::Credits);Bounds(TEXT("credits_bounds"));CreditsNotice();Shot(TEXT("05_Credits_PL"));break;
     case 12:Click(TEXT("CreditsBackButton"));Click(TEXT("PlayButton"));Check(TEXT("game_input_restored"),C->Screen==S::Game&&!C->IsPaused()&&!C->bShowMouseCursor);GetWorld()->GetAuthGameMode<AFootballMode>()->Referee->Goals=7;break;
     case 13:UppercaseText();{auto GoalsLabel=Texts.FindRef(TEXT("GoalsValue"));Check(TEXT("live_score"),GoalsLabel&&GoalsLabel->GetText().ToString()==TEXT("07"));}Shot(TEXT("06_HUD_PL"));break;
     case 14:C->Charging=true;C->ChargeStarted=GetWorld()->GetTimeSeconds()-ErlingShot::HoldSecondsFromPower(.9f);UpdateValues();Shot(TEXT("07_Shot_PL"));break;
@@ -177,6 +196,8 @@ void UErlingInterface::RunUIChecks()
     case 21:UppercaseText();Shot(TEXT("10_Main_EN"));break;
     case 22:C->ChangeScreen(S::Settings);break;
     case 23:UppercaseText();Shot(TEXT("11_Settings_EN"));break;
+    case 24:C->ChangeScreen(S::Credits);break;
+    case 25:UppercaseText();Bounds(TEXT("credits_bounds_en"));CreditsNotice();Shot(TEXT("12_Credits_EN"));break;
     default:
         ErlingTestRun::Finish(UIRun,TEXT("ERLING_UI_CHECKS_COMPLETE"),CheckReport,CheckFailed);break;
     }
