@@ -128,16 +128,50 @@ void AFootballController::RunProjectChecks()
 			Check(TEXT("game_mode"), Screen == EScreen::Game && !IsPaused());
 			break;
 		case 4:
-			Shot(TEXT("03_Play"));
-			// Kick in this stage. The screenshot stalls the frame longer than the
-			// wall-clock delay to stage 5, so a game-time timer would not fire first.
-			if (Mode && Mode->Ball)
+		{
+			static int32 PlayShotPhase = 0;
+			static uint64 PlayShotFrame = 0;
+			const FString PlayShotPath = FPaths::ProjectSavedDir() / TEXT("Screenshots/03_Play.png");
+			if (!Mode || !Mode->Ball)
 			{
-				Mode->Ball->SetWorldLocation(Avatar->GetActorLocation() + FVector(140, 0, -65), false, nullptr, ETeleportType::TeleportPhysics);
-				Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
-				Mode->Kick(Avatar);
+				Check(TEXT("play_screenshot_ball_exists"), false);
+				break;
 			}
+			if (PlayShotPhase == 0)
+			{
+				Mode->ResetBall();
+				Mode->Ball->SetSimulatePhysics(false);
+				PlayShotFrame = GFrameCounter;
+				PlayShotPhase = 1;
+				return;
+			}
+			if (PlayShotPhase == 1)
+			{
+				// Let temporal rendering settle while the ball is stationary.
+				if (GFrameCounter - PlayShotFrame < 180)
+					return;
+				Check(TEXT("play_screenshot_stationary"), !Mode->Ball->IsSimulatingPhysics() &&
+				    Mode->Ball->GetComponentLocation().Equals(FVector(0, 0, ErlingBall::RestHeight), .01f));
+				// A previous run's image must not satisfy the completion check.
+				IFileManager::Get().Delete(*PlayShotPath, false, true);
+				Shot(TEXT("03_Play"));
+				PlayShotFrame = GFrameCounter;
+				PlayShotPhase = 2;
+				UE_LOG(LogTemp, Display, TEXT("PLAY_SCREENSHOT_REQUEST frame=%llu"), PlayShotFrame);
+				return;
+			}
+			// Requests are processed at the end of the frame. Never teleport or kick
+			// in the capture frame, even if saving the image stalls the wall clock.
+			if (GFrameCounter <= PlayShotFrame || FScreenshotRequest::IsScreenshotRequested())
+				return;
+			Check(TEXT("play_screenshot_written_before_kick"), IFileManager::Get().FileSize(*PlayShotPath) > 0);
+			Mode->Ball->SetSimulatePhysics(true);
+			Mode->Ball->SetWorldLocation(Avatar->GetActorLocation() + FVector(140, 0, -65), false, nullptr, ETeleportType::TeleportPhysics);
+			Mode->Ball->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			Mode->Kick(Avatar);
+			UE_LOG(LogTemp, Display, TEXT("PLAY_SCREENSHOT_KICK frame=%llu capture_frame=%llu"), GFrameCounter, PlayShotFrame);
 			break;
+		}
 		case 5:
 			if (Mode && Mode->Ball)
 			{

@@ -1,8 +1,35 @@
-# Erling
+<p align="center">
+  <img src="docs/media/logo.png" alt="Erling Football Club" width="620">
+</p>
 
-**Erling** is a stylized football playground and modular character creator built in **Unreal Engine 5.8** as a gameplay, animation and UI portfolio project.
+<p align="center"><b>Your player. Your pitch. Your rules.</b><br>
+A stylized football playground and modular character creator in Unreal Engine.</p>
 
-The current prototype focuses on making a small football sandbox feel responsive: the player can run, sprint, dribble, charge shots, jump, slide and celebrate goals while the ball remains physically simulated and visually tied to the character's movement.
+<p align="center">
+  <img src="https://img.shields.io/badge/Unreal_Engine-5.8-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Unreal Engine 5.8">
+  <img src="https://img.shields.io/badge/Windows-C%2B%2B-F4EEDF?style=for-the-badge&labelColor=2D3F4E" alt="Windows / C++">
+  <img src="https://img.shields.io/badge/status-portfolio_prototype-CB4B91?style=for-the-badge&labelColor=2D3F4E" alt="Portfolio prototype">
+</p>
+
+<p align="center">
+  <a href="README.pl.md">Polski</a> · <b>English</b> ·
+  <a href="#quick-start">Quick start</a> · <a href="#screenshots">Screenshots</a> ·
+  <a href="#highlights">Features</a> · <a href="#controls">Controls</a> ·
+  <a href="#authorship-and-licence">Credits & licence</a>
+</p>
+
+**Erling** is a personal gameplay, animation and UI portfolio project by **Daniel Maciej Pytel**.
+Run, sprint, dribble, charge shots, jump, slide and celebrate goals in a small football sandbox.
+
+## Screenshots
+
+Actual runtime captures from the development project.
+
+![Football playground](docs/media/gameplay.png)
+
+| Character creator | Main menu |
+|:---:|:---:|
+| ![Modular character creator](docs/media/character_creator.png) | ![Main menu](docs/media/main_menu.png) |
 
 ## Highlights
 
@@ -46,7 +73,7 @@ The character editor also supports drag-to-rotate, `Q` / `E` rotation and mouse-
 
 The pitch, gameplay state and core interaction systems are created and controlled from the runtime code, while the character, animations, materials, audio and map assets live under `Content/Erling`.
 
-## Requirements and setup
+## Quick start
 
 - Windows 64-bit, Git and Git LFS.
 - Unreal Engine **5.8**; the local engine installation used for this maintenance work is **5.8.4**. Other engine versions have not been verified.
@@ -98,8 +125,22 @@ This is a proprietary portfolio project, not an open-source release. See [LICENS
 
 Daniel Maciej Pytel created the character model in Blender. The control graphics and UI combine his Photoshop work with AI assistance based on that work. The animations are original project work created with AI assistance. Stadium elements were made in Unreal Engine using MCP tools, based on his concept artwork and visual references.
 
-The current development assets still contain **“Haaland (Ha Ha Ha)” by CTID** and five externally sourced sound effects. Their distribution permissions have not been established. Audio remains unchanged during this technical maintenance; do not treat these assets as cleared for public distribution.
+The current development assets still contain **“Haaland (Ha Ha Ha)” by CTID** and five externally sourced sound effects. The SFX sources and licences are documented and their provenance issue is resolved. Music clearance is deferred by the maintainer; no permission for game/GitHub distribution has been established. Attribution does not grant that permission. See the notices before public distribution.
 
 ## Project status
 
 **Work in progress.** Erling is an actively developed portfolio prototype focused on responsive character control, readable football interactions and a cohesive presentation rather than a full competitive football game.
+
+## Verification and known limitations
+
+A clean local clone with all 353 LFS assets built and ran with UE 5.8.4 on the same
+Windows development machine. This does not verify GitHub downloads or a clean OS.
+After the screenshot-test correction, the basic checks passed **46/46** with an
+initial 60 FPS cap; earlier UI checks passed **86/86**. The static gameplay image
+is now saved before teleporting or kicking the ball.
+
+With an initial 20 FPS cap, the basic checks passed **45/46**: `sprint_dribble_controlled`
+failed. The same assertion also failed on the pre-change runner (**43/44**).
+This remains a known low-FPS issue. Later graphics checks change the FPS cap.
+Experimental engine toolsets also log Python initialization errors in the inspected
+installation. A packaged Shipping build and physical controller have not been verified.
