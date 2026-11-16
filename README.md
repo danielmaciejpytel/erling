@@ -125,7 +125,7 @@ This is a proprietary portfolio project, not an open-source release. See [LICENS
 
 Daniel Maciej Pytel created the character model in Blender. The control graphics and UI combine his Photoshop work with AI assistance based on that work. The animations are original project work created with AI assistance. Stadium elements were made in Unreal Engine using MCP tools, based on his concept artwork and visual references.
 
-The current development assets still contain **“Haaland (Ha Ha Ha)” by CTID** and five externally sourced sound effects. The SFX sources and licences are documented and their provenance issue is resolved. Music clearance is deferred by the maintainer; no permission for game/GitHub distribution has been established. Attribution does not grant that permission. See the notices before public distribution.
+Background music: **“Haaland (Ha Ha Ha)” — CTID**. Sound effects: **Pixabay**, including **“Good!” by syseQ**, originally from Freesound. File names, creators, source links and licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Project status
 

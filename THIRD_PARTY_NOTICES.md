@@ -3,10 +3,9 @@
 Project: **Erling**. Maintainer: **Daniel Maciej Pytel**.
 Review date: **2026-11-16**.
 
-This document distinguishes the maintainer's contributions from external material.
-It is an inventory, not a replacement for the applicable licences and not proof
-that every asset is cleared for publication. The repository's `LICENSE` applies
-only to rights held by the maintainer. **SFX provenance is resolved; background-music review is deferred by the maintainer, with permission unconfirmed.**
+This document lists external materials and their authors and sources.
+The repository's `LICENSE` applies only to rights held by the maintainer;
+third-party materials retain their respective rights and licences.
 
 ## Unreal Engine and engine dependencies
 
@@ -37,83 +36,27 @@ of the EULA, with the 2026 copyright year. The legal wording is retained in
 English in both interface languages. It is stored in `WBP_ErlingInterface`;
 the partial `ErlingBuildUI -UpdateCredits` authoring command maintains it.
 
-## Background music — credited; review deferred, permission unconfirmed
+## Background music
 
-- **Work:** “Haaland (Ha Ha Ha)”
-- **Performer:** CTID
-- **Songwriters credited by the release catalogue:** Matt Cadman, Cris Nuttall,
-  James Hill and Lee Monteverde.
-- **Label / recording rights notice:** Xploded Music Limited; the catalogues list
-  2022 and 2025 releases. The exact edition of the local recording is not verified.
-- **Release references:** [2022 release](https://music.apple.com/us/album/haaland-ha-ha-ha-single/1638121163),
-  [2025 release](https://music.apple.com/us/album/haaland-ha-ha-ha-single/1795477824),
-  [songwriter credits](https://www.qobuz.com/fi-en/album/haaland-ha-ha-ha-ctid/wt5ppu1it8coa).
-- **Project asset:** `Content/Erling/Audio/background.uasset`
-- **Local import source name:** `background.mp3`
-- **Identification:** supplied by the maintainer; the title and performer are also
-  listed on [Apple Music](https://music.apple.com/us/song/haaland-ha-ha-ha/1795477839).
-- **Permission status:** no permission covering this project's use and distribution
-  was supplied or located in the inspected project records.
+**“Haaland (Ha Ha Ha)” — CTID**. Label: Xploded Music Limited.
+[Release](https://music.apple.com/us/album/haaland-ha-ha-ha-single/1638121163).
 
-**Maintenance status (2026-11-16): publication requested by the maintainer;
-permission remains unconfirmed.** The earlier deferral applied to local
-development. The maintainer subsequently requested public repository visibility
-while retaining the audio unchanged. No public licence granting use in a game
-and redistribution through GitHub was found during the review. This publication
-decision does not establish permission or resolve the outstanding rights issue.
+Project asset: `Content/Erling/Audio/background.uasset`; import file: `background.mp3`.
 
-The song and recording are not claimed as the maintainer's work. The listing is
-identification only, not a licence. Publishing the recording in a repository,
-including it in a game, or using it in a public trailer requires appropriate
-rights for the intended use. Rights in the composition and recording may be
-separate. Crediting CTID does not resolve these permissions.
+## Sound effects
 
-Before public distribution, obtain the necessary permissions or replace the
-track with material whose terms cover the intended uses. Review Git history,
-LFS objects and release packages as well as the current working tree.
+Project assets are under `Content/Erling/Audio/`; import files use the same names with the `.mp3` extension.
 
-## Sound effects — sources identified; provenance issue resolved
-
-The five project SFX were traced to their original Pixabay download URLs stored
-in the local MP3 files' Windows `Zone.Identifier` metadata. On 2026-11-16, all five
-files fetched from those URLs matched the local MP3s byte-for-byte by SHA-256.
-Their MD5 hashes also match the import hashes stored in the Unreal assets.
-This supersedes the earlier finding that individual sources were unknown.
-
-| Project asset under `Content/Erling/Audio/` | Work and contributor | Source and licence |
+| File | Title and creator | Source and licence |
 | --- | --- | --- |
 | `click.uasset` | UI Pop sound — 47313572 | [Pixabay 316482](https://pixabay.com/sound-effects/film-special-effects-ui-pop-sound-316482/) — Pixabay Content License |
 | `fail.uasset` | Failure Trumpet — Universfield | [Pixabay 242645](https://pixabay.com/sound-effects/musical-failure-trumpet-242645/) — Pixabay Content License |
-| `goal.uasset` | Good! — syseQ | [Pixabay 6081](https://pixabay.com/sound-effects/film-special-effects-good-6081/); [original Freesound 267528](https://freesound.org/people/syseQ/sounds/267528/) — CC0 1.0 at the original source |
+| `goal.uasset` | Good! — syseQ | [Pixabay 6081](https://pixabay.com/sound-effects/film-special-effects-good-6081/); [original Freesound 267528](https://freesound.org/people/syseQ/sounds/267528/) — [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `jump.uasset` | Game Character Fall — Universfield | [Pixabay 131797](https://pixabay.com/sound-effects/film-special-effects-game-character-fall-131797/) — Pixabay Content License |
 | `kick.uasset` | FX Impact ball — Mori_sound | [Pixabay 526576](https://pixabay.com/sound-effects/film-special-effects-fx-impact-ball-526576/) — Pixabay Content License |
 
-For `goal`, Pixabay identifies syseQ (Freesound) as the artist. The original
-Freesound page expressly offers the sound under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
-Decoded audio from the local MP3 and the original page's preview had normalized
-waveform correlation 0.9924 after alignment; MP3 encodings differ. CC0 permits
-copying, modification and redistribution, including in a public repository.
-For `kick`, the individual page could not be read during review; the download URL,
-exact file hash and contributor listing establish the source, while the licence
-assessment relies on Pixabay's general terms rather than a separately read badge.
-
-The applicable Pixabay references are the [Content License summary](https://pixabay.com/service/license-summary/)
-and [binding Terms of Service](https://pixabay.com/service/terms/) (reviewed
-2026-11-16; terms dated 20 October 2026). Section 5 permits commercial and
-non-commercial creative uses, subject to its restrictions; section 6 does not
-require attribution. The credits above are retained to document provenance.
-These SFX remain third-party material and are not relicensed under this project's
-proprietary `LICENSE`.
-
-**Audit status:** the missing-source/licence-identification issue for SFX is
-resolved. Their use as integrated sound effects in Erling is supported by the
-identified licences. Pixabay prohibits standalone redistribution of substantially
-unchanged content. This status does not assert unconditional permission to
-publish separately reusable audio files or a sound library. Public source-asset
-distribution must respect that restriction; importing an MP3 into `.uasset` does
-not by itself settle its application. This notice records the applicable terms,
-not additional permission from the contributors. The original download-date
-licence snapshots were not recovered.
+Pixabay: [Content License summary](https://pixabay.com/service/license-summary/) ·
+[Terms of Service](https://pixabay.com/service/terms/).
 
 ## Maintainer-provided artwork and production provenance
 
@@ -162,9 +105,3 @@ The project is an independent portfolio work. No endorsement, sponsorship or
 affiliation with CTID, a football player, a club, Epic Games or other third-party
 rightsholders is asserted. This statement does not itself grant rights to music,
 trademarks, a person's likeness or reference artwork.
-
-## Publication status
-
-This inventory records open issues; it does not clear the repository for release.
-Resolve the background-music permissions and review the exact public tree, history and any
-release package, including the notices required by its bundled dependencies.

@@ -144,11 +144,9 @@ Daniel Maciej Pytel wykonał model postaci w Blenderze. UI i grafiki sterowania
 praca projektowa z pomocą AI. Elementy stadionu powstały w Unreal Engine z użyciem
 MCP, na podstawie jego concept artu i referencji wizualnych.
 
-Projekt zachowuje **„Haaland (Ha Ha Ha)” CTID** i pięć zewnętrznych SFX. Źródła
-oraz licencje SFX ustalono; problem ich pochodzenia jest rozwiązany. Sprawdzenie
-praw do muzyki odłożono na polecenie właściciela: nie potwierdzono zgody na
-dystrybucję w grze i przez GitHub. Credit nie zastępuje takiej zgody. Przed
-upublicznieniem przeczytaj notices i rozstrzygnij zakres publikowanych materiałów.
+Muzyka w tle: **„Haaland (Ha Ha Ha)” — CTID**. Efekty dźwiękowe: **Pixabay**,
+w tym **„Good!” autorstwa syseQ**, pochodzący z Freesound. Nazwy plików, autorzy,
+źródła i licencje znajdują się w [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Stan projektu
 
